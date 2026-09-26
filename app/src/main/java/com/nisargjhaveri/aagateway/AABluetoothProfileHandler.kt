@@ -3,241 +3,253 @@ package com.nisargjhaveri.aagateway
 import WifiInfoRequestOuterClass
 import WifiStartRequestOuterClass
 import android.Manifest
-import android.bluetooth.*
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothServerSocket
+import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import java.io.IOException
-import java.nio.ByteBuffer
-import java.util.*
+import java.util.UUID
 
-class AABluetoothProfileHandler (context: Context) {
+class AABluetoothProfileHandler(private val context: Context) {
     companion object {
         private const val LOG_TAG = "AAService"
+        private const val RETRY_DELAY_MS = 500L
 
         private val A2DP_SOURCE_UUID = UUID.fromString("00001112-0000-1000-8000-00805F9B34FB")
-
-//        val HFP_UUID = UUID.fromString("0000111e-0000-1000-8000-00805f9b34fb")
-
         private val AA_LISTENER_UUID = UUID.fromString("4de17a00-52cb-11e6-bdf4-0800200c9a66")
     }
 
-    private val mContext = context
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val bluetoothAdapter: BluetoothAdapter? =
+        context.getSystemService(BluetoothManager::class.java).adapter
 
-    private var mBluetoothAdapter: BluetoothAdapter? = null
+    private lateinit var wifiHotspotInfo: WifiHotspotInfo
+    private var connectThread: AAConnectThread? = null
+    private var listenerThread: AAProfileListenerThread? = null
 
-    private lateinit var mWifiHotspotInfo: WifiHotspotInfo
-    private lateinit var mCallback: (Boolean) -> Unit
+    fun connectDevice(
+        mac: String,
+        timeout: Long,
+        wifiHotspotInfo: WifiHotspotInfo,
+        callback: (Boolean) -> Unit,
+    ) {
+        cleanup()
+        this.wifiHotspotInfo = wifiHotspotInfo
 
-    private var mConnectThread: AAConnectThread? = null
-
-    init {
-        val bluetoothManager: BluetoothManager =
-            mContext.getSystemService(BluetoothManager::class.java)
-        mBluetoothAdapter = bluetoothManager.adapter
-    }
-
-    private fun log(message: String) {
-        Log.d(LOG_TAG, "AA Bluetooth: $message")
-    }
-
-    fun connectDevice(mac: String, timeout: Long, wifiHotspotInfo: WifiHotspotInfo, callback: (Boolean) -> Unit) {
-        mWifiHotspotInfo = wifiHotspotInfo
-        mCallback = callback
-
-        mBluetoothAdapter?.let { adapter ->
-            val device = adapter.getRemoteDevice(mac.uppercase())
-
-            AAProfileListenerThread().start()
-            mConnectThread = AAConnectThread(device, timeout).apply {
-                start()
-            }
+        if (!hasBluetoothPermission()) {
+            callback(false)
+            return
         }
+
+        val adapter = bluetoothAdapter
+        if (adapter == null) {
+            callback(false)
+            return
+        }
+
+        val device =
+            try {
+                adapter.getRemoteDevice(mac.uppercase())
+            } catch (exception: IllegalArgumentException) {
+                Log.e(LOG_TAG, "Invalid Bluetooth address", exception)
+                callback(false)
+                return
+            }
+
+        listenerThread = AAProfileListenerThread().also(Thread::start)
+        connectThread = AAConnectThread(device, timeout, callback).also(Thread::start)
     }
 
     fun cleanup() {
-        mConnectThread?.cancel()
-        mConnectThread = null
+        connectThread?.cancel()
+        connectThread = null
+        listenerThread?.cancel()
+        listenerThread = null
     }
 
-    fun getWifiStartRequest(): WifiStartRequestOuterClass.WifiStartRequest {
-        val wifiStartRequestBuilder = WifiStartRequestOuterClass.WifiStartRequest.newBuilder()
-        wifiStartRequestBuilder.ipAddress = mWifiHotspotInfo.ipAddress
-        wifiStartRequestBuilder.port = 5288
-
-        return wifiStartRequestBuilder.build()
+    private fun hasBluetoothPermission(): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
+                PackageManager.PERMISSION_GRANTED
     }
 
-    fun getWifiInfoRequest(): WifiInfoRequestOuterClass.WifiInfoRequest {
-        val wifiInfoRequestBuilder = WifiInfoRequestOuterClass.WifiInfoRequest.newBuilder()
-        wifiInfoRequestBuilder.ssid = mWifiHotspotInfo.ssid
-        wifiInfoRequestBuilder.key = mWifiHotspotInfo.passphrase
-        wifiInfoRequestBuilder.bssid = mWifiHotspotInfo.bssid
-        wifiInfoRequestBuilder.securityMode = mWifiHotspotInfo.securityMode
-        wifiInfoRequestBuilder.accessPointType = mWifiHotspotInfo.accessPointType
-
-        return wifiInfoRequestBuilder.build()
+    private fun getWifiStartRequest(): WifiStartRequestOuterClass.WifiStartRequest {
+        return WifiStartRequestOuterClass.WifiStartRequest.newBuilder()
+            .setIpAddress(wifiHotspotInfo.ipAddress)
+            .setPort(5288)
+            .build()
     }
 
-    fun send(socket: BluetoothSocket, byteArray: ByteArray, s: Short) {
-        val sendBuffer = ByteBuffer.allocate(byteArray.size + 4)
-        sendBuffer.putShort(byteArray.size.toShort())
-        sendBuffer.putShort(s)
-        sendBuffer.put(byteArray)
-
-        socket.outputStream.write(sendBuffer.array())
+    private fun getWifiInfoRequest(): WifiInfoRequestOuterClass.WifiInfoRequest {
+        return WifiInfoRequestOuterClass.WifiInfoRequest.newBuilder()
+            .setSsid(wifiHotspotInfo.ssid)
+            .setKey(wifiHotspotInfo.passphrase)
+            .setBssid(wifiHotspotInfo.bssid)
+            .setSecurityMode(wifiHotspotInfo.securityMode)
+            .setAccessPointType(wifiHotspotInfo.accessPointType)
+            .build()
     }
 
-    fun read(socket: BluetoothSocket): Triple<Short, Short, ByteBuffer> {
-        val byteArray = ByteArray(1024)
-        socket.inputStream.read(byteArray)
-
-        val readBuffer = ByteBuffer.wrap(byteArray)
-        val length = readBuffer.short
-        val s = readBuffer.short
-
-        val data = ByteArray(length.toInt())
-        readBuffer.get(data)
-
-        val name = when (s.toInt()) {
-            1 -> "WifiStartRequest"
-            2 -> "WifiInfoRequest"
-            3 -> "WifiInfoResponse"
-            4 -> "WifiVersionRequest"
-            5 -> "WifiVersionResponse"
-            6 -> "WifiConnectStatus"
-            7 -> "WifiStartResponse"
-            else -> "UNKNOWN"
-        }
-
-        log("Read $name. length: $length, s: $s, data: ${data.toHex()}")
-
-        return Triple(length, s, ByteBuffer.wrap(data))
-    }
-
-    private inner class AAConnectThread(device: BluetoothDevice, timeout: Long) : Thread() {
-        var mmSocket: BluetoothSocket? = null
-        var mDevice = device
-        var mTimeout = timeout
-
-        var mRunning = true
+    private inner class AAConnectThread(
+        private val device: BluetoothDevice,
+        private val timeoutMs: Long,
+        private val callback: (Boolean) -> Unit,
+    ) : Thread() {
+        @Volatile private var running = true
+        @Volatile private var socket: BluetoothSocket? = null
 
         override fun run() {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && mContext.checkSelfPermission(
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
+            if (!hasBluetoothPermission()) {
+                callback(false)
                 return
             }
 
-            mmSocket = mDevice.createRfcommSocketToServiceRecord(A2DP_SOURCE_UUID)
+            val deadline = SystemClock.elapsedRealtime() + timeoutMs
+            var connected = false
 
-            mmSocket?.let { socket ->
-                // Connect to the remote device through the socket. This call blocks
-                // until it succeeds or throws an exception.
-                var connected = false
-
-                val delay: Long = 500
-
-                android.os.Handler(Looper.getMainLooper()).postDelayed({
-                    mRunning = false;
-                }, mTimeout)
-
-                while (!connected && mRunning) {
+            while (running && !connected && SystemClock.elapsedRealtime() < deadline) {
+                val attemptSocket =
                     try {
-                        socket.connect()
-                        connected = true
-                        log("BT Connection successful")
-                    } catch (e: IOException) {
-                        log("BT Connection failed: ${e.message}")
-                        sleep(delay)
+                        device.createRfcommSocketToServiceRecord(A2DP_SOURCE_UUID)
+                    } catch (exception: IOException) {
+                        Log.e(LOG_TAG, "Could not create Bluetooth socket", exception)
+                        break
+                    }
+                socket = attemptSocket
+
+                val timeoutAction = Runnable {
+                    if (running && SystemClock.elapsedRealtime() >= deadline) {
+                        runCatching { attemptSocket.close() }
+                    }
+                }
+                mainHandler.postDelayed(
+                    timeoutAction,
+                    (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0),
+                )
+
+                try {
+                    attemptSocket.connect()
+                    connected = running
+                } catch (exception: IOException) {
+                    Log.d(LOG_TAG, "Bluetooth connection attempt failed: ${exception.message}")
+                } finally {
+                    mainHandler.removeCallbacks(timeoutAction)
+                    if (!connected) {
+                        runCatching { attemptSocket.close() }
                     }
                 }
 
-                if (!connected) {
-                    log("BT Connection failed")
+                if (!connected && running) {
+                    try {
+                        sleep(
+                            RETRY_DELAY_MS.coerceAtMost(
+                                (deadline - SystemClock.elapsedRealtime()).coerceAtLeast(0)
+                            )
+                        )
+                    } catch (_: InterruptedException) {
+                        running = false
+                    }
                 }
+            }
 
-                mCallback.invoke(connected)
+            if (running) {
+                callback(connected)
             }
         }
 
-        // Closes the client socket and causes the thread to finish.
         fun cancel() {
-            try {
-                mmSocket?.close()
-            } catch (e: IOException) {
-                log("Could not close the client socket")
-            }
+            running = false
+            interrupt()
+            runCatching { socket?.close() }
+            socket = null
         }
     }
 
-    private inner class AAProfileListenerThread() : Thread() {
-        private var mServerSocket: BluetoothServerSocket? = null
-        private var mSocket: BluetoothSocket? = null
+    private inner class AAProfileListenerThread : Thread() {
+        @Volatile private var running = true
+        @Volatile private var serverSocket: BluetoothServerSocket? = null
+        @Volatile private var socket: BluetoothSocket? = null
 
         override fun run() {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && mContext.checkSelfPermission(
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
+            if (!hasBluetoothPermission()) {
                 return
             }
 
-            log("Creating service record for AA Listener")
-            mServerSocket = mBluetoothAdapter?.listenUsingRfcommWithServiceRecord("AA Listener", AA_LISTENER_UUID)
-
-//            log("Creating service record for HFP")
-//            val hfpServerSocket = mBluetoothAdapter?.listenUsingRfcommWithServiceRecord("HFP", HFP_UUID)
-
-            mSocket = mServerSocket?.accept()
-            log("Got connection on AA Listener")
-
             try {
-                mSocket?.let { socket ->
-                    send(socket, getWifiStartRequest().toByteArray(), 1)
-                    log("Sent WifiStartRequest")
+                Log.d(LOG_TAG, "Creating service record for AA listener")
+                serverSocket =
+                    bluetoothAdapter?.listenUsingRfcommWithServiceRecord(
+                        "AA Listener",
+                        AA_LISTENER_UUID,
+                    )
+                socket = serverSocket?.accept()
+                if (!running) {
+                    return
+                }
 
-                    val (_, s, _) = read(socket)
+                socket?.let { connectedSocket ->
+                    BluetoothFrameCodec.write(
+                        connectedSocket.outputStream,
+                        1,
+                        getWifiStartRequest().toByteArray(),
+                    )
+                    Log.d(LOG_TAG, "Sent WifiStartRequest")
 
-                    if (s == 2.toShort()) {
-                        send(socket, getWifiInfoRequest().toByteArray(), 3)
-                        log("Sent WifiInfoResponse")
-                    } else {
-                        log("Expected WifiInfoRequest (s = 2), got s = $s")
+                    val wifiInfoRequest = BluetoothFrameCodec.read(connectedSocket.inputStream)
+                    if (wifiInfoRequest.type != 2) {
+                        throw IOException(
+                            "Expected WifiInfoRequest, got type ${wifiInfoRequest.type}"
+                        )
                     }
 
-                    // WifiStartResponse and WifiConnectStatus are expected
-                    read(socket)
-                    read(socket)
+                    BluetoothFrameCodec.write(
+                        connectedSocket.outputStream,
+                        3,
+                        getWifiInfoRequest().toByteArray(),
+                    )
+                    Log.d(LOG_TAG, "Sent WifiInfoResponse")
+
+                    val startResponse = BluetoothFrameCodec.read(connectedSocket.inputStream)
+                    val connectStatus = BluetoothFrameCodec.read(connectedSocket.inputStream)
+                    if (startResponse.type != 7 || connectStatus.type != 6) {
+                        throw IOException(
+                            "Unexpected Android Auto response types: " +
+                                "${startResponse.type}, ${connectStatus.type}"
+                        )
+                    }
                 }
+            } catch (exception: IOException) {
+                if (running) {
+                    Log.e(LOG_TAG, "Android Auto Bluetooth handshake failed", exception)
+                }
+            } catch (exception: RuntimeException) {
+                if (running) {
+                    Log.e(LOG_TAG, "Invalid Android Auto Bluetooth frame", exception)
+                }
+            } finally {
+                closeSockets()
             }
-            catch (e: java.lang.Exception) {
-                e.printStackTrace()
-            }
-
-            mSocket?.close()
-            mSocket = null
-
-            mServerSocket?.close()
-//            hfpServerSocket?.close()
-        }
-    }
-
-    private val hexArray = "0123456789ABCDEF".toCharArray()
-    fun ByteArray.toHex(): String {
-        val hexChars = CharArray(size * 2)
-
-        var i = 0
-
-        forEach {
-            val octet = it.toInt()
-            hexChars[i] = hexArray[(octet and 0xF0).ushr(4)]
-            hexChars[i+1] = hexArray[(octet and 0x0F)]
-            i += 2
         }
 
-        return String(hexChars)
+        fun cancel() {
+            running = false
+            closeSockets()
+            interrupt()
+        }
+
+        private fun closeSockets() {
+            runCatching { socket?.close() }
+            socket = null
+            runCatching { serverSocket?.close() }
+            serverSocket = null
+        }
     }
 }
