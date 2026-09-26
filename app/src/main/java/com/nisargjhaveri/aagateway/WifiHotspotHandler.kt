@@ -174,6 +174,7 @@ class WifiHotspotHandler(context: Context) {
 
         if (System.currentTimeMillis() >= deadlineMs) {
             Log.e(LOG_TAG, "Timed out waiting for local-only hotspot interface")
+            stop()
             completeStart(callback, null)
             return
         }
@@ -239,12 +240,6 @@ class WifiHotspotHandler(context: Context) {
             return
         }
 
-        findHotspotEndpoint()?.let {
-            legacyHotspotStarted = true
-            completeStart(callback, configuredHotspotInfo(ssid, passphrase, bssid, it))
-            return
-        }
-
         val callbackClass = getOnStartTetheringCallbackClass()
         if (callbackClass == null) {
             completeStart(callback, null)
@@ -306,6 +301,7 @@ class WifiHotspotHandler(context: Context) {
 
         if (System.currentTimeMillis() >= deadlineMs) {
             Log.e(LOG_TAG, "Timed out waiting for configured hotspot interface")
+            stop()
             completeStart(callback, null)
             return
         }

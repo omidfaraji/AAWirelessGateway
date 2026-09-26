@@ -214,9 +214,9 @@ class AAGatewayService : Service() {
     private fun stopHotspot() {
         if (mHotspotStarted) {
             Log.i(LOG_TAG, "Stopping wifi hotspot")
-            mWifiHotspotHandler.stop()
-            mHotspotStarted = false
         }
+        mWifiHotspotHandler.stop()
+        mHotspotStarted = false
     }
 
     private fun stopService() {

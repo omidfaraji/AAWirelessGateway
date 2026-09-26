@@ -84,20 +84,20 @@ class SettingsFragment : PreferenceFragmentCompat() {
                         requestLocationPermissions {
                             updateSettingsState(context)
                         }
-                        findPreference<Preference>("nearby_wifi_permissions")?.apply {
-                            setOnPreferenceClickListener {
-                                mWifiClientHandler?.requestNearbyWifiPermission {
-                                    updateSettingsState(context)
-                                }
-                                true
-                            }
-                        }
                     }
                     else if (!hasBackgroundLocationPermission()) {
                         requestBackgroundLocationPermissions {
                             updateSettingsState(context)
                         }
                     }
+                }
+                true
+            }
+        }
+        findPreference<Preference>("nearby_wifi_permissions")?.apply {
+            setOnPreferenceClickListener {
+                mWifiClientHandler?.requestNearbyWifiPermission {
+                    updateSettingsState(context)
                 }
                 true
             }
