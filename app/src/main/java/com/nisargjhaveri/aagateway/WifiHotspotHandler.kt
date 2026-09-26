@@ -150,6 +150,10 @@ class WifiHotspotHandler(context: Context) {
     }
 
     private fun persistentRandomizedBssid(configuration: SoftApConfiguration): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            return null
+        }
+
         return try {
             HiddenApiBypass.addHiddenApiExemptions("Landroid/net/wifi/SoftApConfiguration;")
             configuration.javaClass
