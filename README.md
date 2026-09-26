@@ -6,6 +6,9 @@ but not wireless, Android Auto.
 The spare **gateway phone** connects to the car by USB. Your **main phone** connects to the
 gateway over Bluetooth and Wi-Fi, allowing Android Auto to appear wirelessly on the car display.
 
+[Open the documentation wiki](https://github.com/omidfaraji/AAWirelessGateway/wiki) for focused
+setup, troubleshooting, compatibility, and build guides.
+
 > This is an experimental community project. Compatibility depends on the phones, Android
 > versions, USB cable, and vehicle head unit.
 
