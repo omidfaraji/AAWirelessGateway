@@ -1,82 +1,124 @@
-# AAWirelessGateway
+# AA Wireless Gateway
 
-Enjoy Wireless Android Auto in your car, even if it has only wired Android Auto support.
-Use a spare device as gateway/proxy to enable Wireless Android Auto from your regular phone.
+AA Wireless Gateway turns a spare Android phone into an adapter for cars that support wired,
+but not wireless, Android Auto.
 
-The app needs to be installed in the *gateway* (device connected to the car with USB). It can connect to the the *wireless client* (the phone which will connect to the car wirelessly) using the native Android Auto connection method and does not need any apps or modification on the *wireless client*.
+The spare **gateway phone** connects to the car by USB. Your **main phone** connects to the
+gateway over Bluetooth and Wi-Fi, allowing Android Auto to appear wirelessly on the car display.
 
-In case the native Android Auto connection does not work, the app can be installed in both the *gateway* and the *wireless client*. Enable the relevant mode (wireless client or gateway) from the app settings and configure other options accordingly.
+> This is an experimental community project. Compatibility depends on the phones, Android
+> versions, USB cable, and vehicle head unit.
 
-Inspired by the work done by Emil (@borconi, https://github.com/borconi/AAGateWay) and others. Thanks!
+## Requirements
+
+- A car with working wired Android Auto
+- A spare phone running Android 8.0 or newer
+- A main phone that supports wireless Android Auto
+- Bluetooth pairing between the two phones
+- A reliable USB data cable
+
+Root is **not required** for the recommended setup. It is only used by the optional fallback that
+starts wired Android Auto directly on the gateway phone.
+
+## Recommended setup
+
+Install the app only on the gateway phone:
+
+1. Pair the gateway phone with the main phone in Android Bluetooth settings.
+2. Open AA Wireless Gateway and enable **USB gateway - spare phone**.
+3. Select the main phone under **Android Auto phone**.
+4. Keep **Native wireless Android Auto** enabled.
+5. Grant every permission shown under **Permissions and pairing**.
+6. Confirm the status card says **Ready to connect**.
+7. Enable Bluetooth, Wi-Fi, and wireless Android Auto on the main phone.
+8. Connect the gateway phone to the car's Android Auto USB port.
+9. If Android asks which app should handle the USB device, choose **AA Wireless Gateway** and
+   **Always**.
+
+The first connection may take one or two minutes while permission and pairing prompts are
+completed. Later connections normally take 15 to 60 seconds.
+
+## Legacy two-app setup
+
+Use this only if the native connection does not work:
+
+1. Install the app on both phones.
+2. On the spare phone, enable **USB gateway - spare phone** and disable
+   **Native wireless Android Auto**.
+3. Configure the manual hotspot details and select the main phone.
+4. On the main phone, enable **Wireless client - main phone**.
+5. Enter the gateway hotspot details and select the gateway phone.
+6. Grant all requested permissions until both apps report **Ready to connect**.
 
 ## How it works
 
-### Native Android Auto connection (recommended)
-- The app in gateway mode automatically starts when an Android Auto enabled headunit is connected via USB.
-- Enabled the Wifi hotspot.
-- Connects to the wireless client via Bluetooth and replicates the communication Wireless Android Auto expects, including instructions and credentials to connect to the Wifi and start Wireless Android Auto.
-- Android Auto on the wireless client connects seamlessly.
+In native mode, the gateway:
 
-### Custom connection
-In gateway mode:
-- Automatically starts when an Android Auto enabled headunit is connected via USB.
-- Enables the Wifi hotspot.
-- Tries to signal the selected wireless client via Bluetooth and waits for it to connect back.
-- Once connected, it starts forwarding communication between USB and the wireless client.
+1. Starts when the car opens an Android Auto USB accessory connection.
+2. Creates a local-only Wi-Fi hotspot with generated credentials.
+3. Sends those credentials to the selected main phone through the Android Auto Bluetooth
+   handshake.
+4. Forwards Android Auto traffic between Wi-Fi and the car's USB connection.
 
-In wireless client mode:
-- Automatically starts when the selected gateway tries to connect via Bluetooth.
-- Connects to the gateway Wifi hotspot and start Wireless Android Auto pointing it to the gateway.
-- If everything works, the Android Auto should start on the car display wirelessly.
+Android 11 and newer hotspot behaviors are handled automatically, including dynamic hotspot
+addresses and systems that hide network-interface details. An optional gateway IP fallback is
+available for devices where Android prevents automatic discovery.
 
-## Features
-- Supports native Android Auto connection, no need to install the app on wireless client.
-- Also provides an option for custom connection with more options
-- Easily configure the gateway and wireless client with in-app configuration options.
-- Refuse wireless connection in case of low battery or power saving mode in the wireless client device.
-- An option to fallback to the local Android Auto from the gateway device in case wireless connection fails (root required in gateway device for this).
-- Root is not required, but can provide enhanced features when present in gateway device.
-- Both gateway and wireless clients only wake up when there is a connection possible. The app doesn't run in background always.
+## Troubleshooting
 
-## How to use
-Install the app in both the devices. You can build the app from the source code or use of the prebuilt apks.
+| Problem | What to check |
+|---|---|
+| The app does not open after USB connection | Use the car's Android Auto USB port and a data-capable cable. |
+| The app says **Setup needed** | Follow the exact action displayed in the status card. |
+| Hotspot creation fails on Android 12 or older | Grant precise location and **Allow all the time** location access. |
+| The main phone does not connect | Enable Bluetooth and Wi-Fi, confirm the phones are paired, and enable wireless Android Auto. |
+| Connection stops when the screen turns off | Set battery usage for the app to **Unrestricted** on the gateway phone. |
+| Connection repeatedly fails | Unplug USB, stop the app, verify both phones still show **Ready to connect**, and try again. |
 
-### Native Android Auto connection
-On gateway device:
-- Enable "USB gateway - spare phone".
-- In "Gateway setup", select the main phone under "Android Auto phone".
-  - You may need to pair the device using bluetooth if not already available. You can pair by navigating to "Pair Bluetooth Device" first.
-- Keep "Native wireless Android Auto" enabled.
-- Grant the requested Bluetooth and nearby Wi-Fi permissions. The setup card shows anything that still needs attention.
-- Leave "Gateway IP fallback" empty unless Android hides the generated hotspot address. If needed, enter the gateway address reported by the device.
-- (Optional) If your gateway device is rooted, make this app an system app. This enables more options such as USB Android Auto fallback.
-- On the first USB connection after this, it'll ask to select which app to handle the USB accessory. Select this app and select "Always".
-- Make sure your Bluetooth and Wifi are enabled in the device.
-- Connect the gateway device to the car with USB.
+For debugging, capture logs immediately after a failed attempt:
 
-### Custom connection
-On gateway device:
-- Enable "USB gateway - spare phone".
-- Select the main phone under "Android Auto phone".
-  - You may need to pair the device using bluetooth if not already available. You can pair by navigating to "Pair Bluetooth Device" first.
-- Setup Hotspot name and password as you wish from Android Settings, make a note of it.
-- Disable "Native wireless Android Auto" and enter the manual hotspot details.
-- Grant the requested permissions and resolve any item shown in the setup card.
-- (Optional) If your gateway device is rooted, make this app an system app. This enables more options such as USB Android Auto fallback.
-- On the first USB connection after this, it'll ask to select which app to handle the USB accessory. Select this app and select "Always".
-- Make sure your Bluetooth and Wifi are enabled in the device.
+    adb logcat -s AAService
 
-For wireless client:
-- Enable "Wireless client - main phone".
-- Enter the gateway hotspot name and password.
-- Enable "Gateway hotspot MAC may change" or enter the gateway hotspot Wi-Fi address.
-- Select the spare phone under "Gateway phone". Make sure the device is already paired.
-- Grant the requested permissions and resolve any item shown in the setup card.
-- On the first connection there might be a notification or dialog for allowing Wifi connection. Make sure you allow that.
-- Make sure your Bluetooth and Wifi are enabled in the device.
+## Build
 
-This should make it work. Try connecting the gateway device to car with USB.
+The project requires Android SDK 36 and Java 17.
 
----
+    ./gradlew assembleDebug
 
-Please note that this hasn't been heavily tested in different cars and devices and won't necessarily work in all scenarios.
+The debug APK is generated at:
+
+    app/build/outputs/apk/debug/app-debug.apk
+
+Run the automated checks with:
+
+    ./gradlew testDebugUnitTest lintDebug
+
+Hardware hotspot behavior can be checked on a connected Android device with:
+
+    ./gradlew connectedDebugAndroidTest
+
+## Compatibility
+
+- Minimum Android version: Android 8.0, API 26
+- Target Android version: Android 16, API 36
+- Tested gateway devices:
+  - Samsung Galaxy A70, Android 11
+  - Samsung Galaxy S23 Ultra, Android 16
+
+Not every vehicle or Android device combination is guaranteed to work.
+
+## Safety
+
+Complete setup and troubleshooting while parked. Do not interact with either phone while driving.
+
+## License
+
+The upstream project currently has no declared software license. Public source availability does
+not by itself grant permission to redistribute APKs or publish derivative releases. Obtain
+permission from the upstream author before distributing compiled builds.
+
+## Credits
+
+This fork is based on
+[nisargjhaveri/AAWirelessGateway](https://github.com/nisargjhaveri/AAWirelessGateway) and was
+inspired by [borconi/AAGateWay](https://github.com/borconi/AAGateWay).
