@@ -3,6 +3,7 @@ package com.nisargjhaveri.aagateway
 import WifiInfoRequestOuterClass
 import WifiStartRequestOuterClass
 import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
@@ -178,6 +179,7 @@ class AABluetoothProfileHandler(private val context: Context) {
         @Volatile private var serverSocket: BluetoothServerSocket? = null
         @Volatile private var socket: BluetoothSocket? = null
 
+        @SuppressLint("MissingPermission")
         override fun run() {
             if (!hasBluetoothPermission()) {
                 return
