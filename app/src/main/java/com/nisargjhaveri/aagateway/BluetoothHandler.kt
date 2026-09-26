@@ -1,13 +1,13 @@
 package com.nisargjhaveri.aagateway
 
 import android.Manifest
+import android.app.Activity
 import android.bluetooth.*
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.result.ActivityResultCaller
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
 import java.io.IOException
 import java.util.*
 
@@ -24,7 +24,7 @@ class BluetoothHandler (context: Context, activityResultCaller: ActivityResultCa
         val callback = mEnableBluetoothCallback
         mEnableBluetoothCallback = null
 
-        if (it.resultCode == AppCompatActivity.RESULT_OK) {
+        if (it.resultCode == Activity.RESULT_OK) {
             callback?.invoke(true)
         }
         else {

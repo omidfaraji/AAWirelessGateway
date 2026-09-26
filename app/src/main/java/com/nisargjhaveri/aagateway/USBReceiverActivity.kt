@@ -3,16 +3,23 @@ package com.nisargjhaveri.aagateway
 import android.content.Intent
 import android.hardware.usb.UsbAccessory
 import android.hardware.usb.UsbManager
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.core.content.IntentCompat
 import androidx.preference.PreferenceManager
+import com.nisargjhaveri.aagateway.ui.theme.AAGatewayTheme
+import com.nisargjhaveri.aagateway.ui.usb.UsbConnectionScreen
 
-class USBReceiverActivity : AppCompatActivity() {
+class USBReceiverActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_usbreceiver)
+        setContent {
+            AAGatewayTheme {
+                UsbConnectionScreen()
+            }
+        }
     }
 
     override fun onResume() {

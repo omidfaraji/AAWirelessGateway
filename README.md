@@ -43,13 +43,12 @@ Install the app in both the devices. You can build the app from the source code 
 
 ### Native Android Auto connection
 On gateway device:
-- Enable "Use this device as gateway" option.
-- Ensure all the permissions are granted. Scroll to the bottom of the config page to check status.
-- In "Gateway device settings" section, select "Client Bluetooth Device" as the device you want to use as the wireless client.
+- Enable "USB gateway - spare phone".
+- In "Gateway setup", select the main phone under "Android Auto phone".
   - You may need to pair the device using bluetooth if not already available. You can pair by navigating to "Pair Bluetooth Device" first.
-- Setup Hotspot name and password as you wish from Android Settings, make a note of it.
-- Make sure "Native AA Connection" option is enabled.
-- Enter "Hotspot SSID", "Hotspot password" and "Hotspot BSSID" to match the system configuration.
+- Keep "Native wireless Android Auto" enabled.
+- Grant the requested Bluetooth and nearby Wi-Fi permissions. The setup card shows anything that still needs attention.
+- Leave "Gateway IP fallback" empty unless Android hides the generated hotspot address. If needed, enter the gateway address reported by the device.
 - (Optional) If your gateway device is rooted, make this app an system app. This enables more options such as USB Android Auto fallback.
 - On the first USB connection after this, it'll ask to select which app to handle the USB accessory. Select this app and select "Always".
 - Make sure your Bluetooth and Wifi are enabled in the device.
@@ -57,21 +56,22 @@ On gateway device:
 
 ### Custom connection
 On gateway device:
-- Enable "Use this device as gateway" option.
-- Ensure all the permissions are granted. Scroll to the bottom of the config page to check status.
-- In "Gateway device settings" section, select "Client Bluetooth Device" as the device you want to use as the wireless client.
+- Enable "USB gateway - spare phone".
+- Select the main phone under "Android Auto phone".
   - You may need to pair the device using bluetooth if not already available. You can pair by navigating to "Pair Bluetooth Device" first.
 - Setup Hotspot name and password as you wish from Android Settings, make a note of it.
-- Disable "Native AA Connection" option.
+- Disable "Native wireless Android Auto" and enter the manual hotspot details.
+- Grant the requested permissions and resolve any item shown in the setup card.
 - (Optional) If your gateway device is rooted, make this app an system app. This enables more options such as USB Android Auto fallback.
 - On the first USB connection after this, it'll ask to select which app to handle the USB accessory. Select this app and select "Always".
 - Make sure your Bluetooth and Wifi are enabled in the device.
 
 For wireless client:
-- Enable "Use this device as wireless client" option.
-- Enter the gateway Hotspot details in "Gateway Wifi SSID" and "Gateway Wifi password".
-- Enable "Use Gateway Wifi for Internet" or enter "Gateway Wifi BSSID".
-- Select the gateway device in "Gateway Bluetooth Device". Make sure the device is already paired.
+- Enable "Wireless client - main phone".
+- Enter the gateway hotspot name and password.
+- Enable "Gateway hotspot MAC may change" or enter the gateway hotspot Wi-Fi address.
+- Select the spare phone under "Gateway phone". Make sure the device is already paired.
+- Grant the requested permissions and resolve any item shown in the setup card.
 - On the first connection there might be a notification or dialog for allowing Wifi connection. Make sure you allow that.
 - Make sure your Bluetooth and Wifi are enabled in the device.
 
