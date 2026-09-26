@@ -1,6 +1,7 @@
 package com.nisargjhaveri.aagateway.ui.settings
 
 import android.content.SharedPreferences
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -433,16 +434,21 @@ fun GatewaySettingsScreen(
                                 }
                             },
                         )
-                        if (state.isWirelessClient) {
+                        if (
+                            state.isWirelessClient ||
+                                state.isGateway &&
+                                    state.nativeConnectionFlow &&
+                                    Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                        ) {
                             ActionSettingRow(
                                 title = "Location access",
                                 summary =
                                     when {
                                         !state.locationPermissionGranted ->
-                                            "Required to identify the connected hotspot."
+                                            "Required to create or identify the hotspot."
                                         !state.backgroundLocationPermissionGranted ->
                                             "Select Allow all the time for background connections."
-                                        else -> "Required to identify the connected hotspot."
+                                        else -> "Required for background hotspot connections."
                                     },
                                 completed =
                                     state.locationPermissionGranted &&
@@ -462,6 +468,8 @@ fun GatewaySettingsScreen(
                                     }
                                 },
                             )
+                        }
+                        if (state.isWirelessClient) {
                             ActionSettingRow(
                                 title = "Modify system settings",
                                 summary = "Used to manage automatic Wi-Fi connections.",

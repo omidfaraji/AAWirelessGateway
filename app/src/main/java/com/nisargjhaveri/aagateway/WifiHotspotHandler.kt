@@ -14,6 +14,7 @@ import android.util.Log
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 import java.lang.reflect.Method
 import java.net.Inet4Address
+import java.net.Inet6Address
 import java.net.NetworkInterface
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
@@ -60,7 +61,7 @@ class WifiHotspotHandler(context: Context) {
         startCompleted = AtomicBoolean(false)
 
         if (useNativeConnectionFlow) {
-            startLocalOnlyHotspot(configuredIpAddress, callback)
+            startLocalOnlyHotspot(configuredBssid, configuredIpAddress, callback)
         } else {
             startConfiguredTethering(
                 configuredSsid,
@@ -84,6 +85,7 @@ class WifiHotspotHandler(context: Context) {
     }
 
     private fun startLocalOnlyHotspot(
+        configuredBssid: String?,
         configuredIpAddress: String?,
         callback: (success: Boolean, wifiHotspotInfo: WifiHotspotInfo?) -> Unit
     ) {
@@ -92,8 +94,9 @@ class WifiHotspotHandler(context: Context) {
                 object : WifiManager.LocalOnlyHotspotCallback() {
                     override fun onStarted(reservation: WifiManager.LocalOnlyHotspotReservation) {
                         localOnlyHotspotReservation = reservation
+                        val credentials = credentialsFrom(reservation)
                         waitForHotspotInterface(
-                            credentialsFrom(reservation),
+                            credentials.copy(bssid = credentials.bssid ?: configuredBssid),
                             configuredIpAddress,
                             System.currentTimeMillis() + HOTSPOT_START_TIMEOUT_MS,
                             callback,
@@ -251,10 +254,34 @@ class WifiHotspotHandler(context: Context) {
                 val hardwareAddress =
                     networkInterface.hardwareAddress?.joinToString(":") {
                         "%02x".format(it.toInt() and 0xff)
-                    }
+                    } ?: networkInterface.eui48AddressFromLinkLocalAddress()
                 HotspotEndpoint(address.hostAddress.orEmpty(), hardwareAddress)
             }
             .firstOrNull()
+    }
+
+    private fun NetworkInterface.eui48AddressFromLinkLocalAddress(): String? {
+        val address =
+            Collections.list(inetAddresses)
+                .filterIsInstance<Inet6Address>()
+                .firstOrNull {
+                    val bytes = it.address
+                    it.isLinkLocalAddress &&
+                        bytes[11] == 0xff.toByte() &&
+                        bytes[12] == 0xfe.toByte()
+                }
+                ?.address
+                ?: return null
+        val macAddress =
+            byteArrayOf(
+                (address[8].toInt() xor 0x02).toByte(),
+                address[9],
+                address[10],
+                address[13],
+                address[14],
+                address[15],
+            )
+        return macAddress.joinToString(":") { "%02x".format(it.toInt() and 0xff) }
     }
 
     private fun isPotentialHotspotInterface(name: String): Boolean {

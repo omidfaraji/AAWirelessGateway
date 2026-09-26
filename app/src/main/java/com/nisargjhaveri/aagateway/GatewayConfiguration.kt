@@ -43,6 +43,8 @@ data class GatewayConfiguration(
     fun validationError(
         bluetoothPermissionGranted: Boolean,
         nearbyWifiPermissionGranted: Boolean,
+        locationPermissionGranted: Boolean = true,
+        backgroundLocationPermissionGranted: Boolean = true,
     ): String? {
         if (clientAddress == null || !MAC_ADDRESS_PATTERN.matches(clientAddress)) {
             return "Select a paired client Bluetooth device"
@@ -52,6 +54,12 @@ data class GatewayConfiguration(
         }
         if (nativeConnectionFlow && !nearbyWifiPermissionGranted) {
             return "Grant the nearby Wi-Fi devices permission"
+        }
+        if (nativeConnectionFlow && !locationPermissionGranted) {
+            return "Grant precise location access"
+        }
+        if (nativeConnectionFlow && !backgroundLocationPermissionGranted) {
+            return "Grant background location access"
         }
         if (!nativeConnectionFlow) {
             if (hotspotSsid.toByteArray(Charsets.UTF_8).size !in 1..32) {
@@ -96,5 +104,22 @@ fun GatewayConfiguration.validationError(context: Context): String? {
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             context.checkSelfPermission(Manifest.permission.NEARBY_WIFI_DEVICES) ==
                 PackageManager.PERMISSION_GRANTED
-    return validationError(bluetoothPermissionGranted, nearbyWifiPermissionGranted)
+    val requiresLocationPermission =
+        nativeConnectionFlow && Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+    val locationPermissionGranted =
+        !requiresLocationPermission ||
+            context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+    val requiresBackgroundLocationPermission =
+        requiresLocationPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+    val backgroundLocationPermissionGranted =
+        !requiresBackgroundLocationPermission ||
+            context.checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+    return validationError(
+        bluetoothPermissionGranted,
+        nearbyWifiPermissionGranted,
+        locationPermissionGranted,
+        backgroundLocationPermissionGranted,
+    )
 }

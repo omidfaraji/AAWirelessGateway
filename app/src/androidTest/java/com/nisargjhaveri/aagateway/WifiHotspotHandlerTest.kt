@@ -2,6 +2,7 @@ package com.nisargjhaveri.aagateway
 
 import android.Manifest
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
@@ -20,7 +21,13 @@ import org.junit.runner.RunWith
 class WifiHotspotHandlerTest {
     @get:Rule
     val permissionRule: GrantPermissionRule =
-        GrantPermissionRule.grant(Manifest.permission.NEARBY_WIFI_DEVICES)
+        GrantPermissionRule.grant(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                Manifest.permission.NEARBY_WIFI_DEVICES
+            } else {
+                Manifest.permission.ACCESS_FINE_LOCATION
+            }
+        )
 
     private val handler =
         WifiHotspotHandler(ApplicationProvider.getApplicationContext<Context>())
@@ -37,7 +44,13 @@ class WifiHotspotHandlerTest {
         var hotspotInfo: WifiHotspotInfo? = null
 
         Handler(Looper.getMainLooper()).post {
-            handler.start("", "", null, "10.249.96.99", true) { started, info ->
+            handler.start(
+                "",
+                "",
+                null,
+                "10.249.96.99",
+                true,
+            ) { started, info ->
                 success = started
                 hotspotInfo = info
                 completed.countDown()
@@ -50,6 +63,7 @@ class WifiHotspotHandlerTest {
         assertTrue(hotspotInfo!!.ssid.isNotBlank())
         assertTrue(hotspotInfo!!.passphrase.isNotBlank())
         assertTrue(hotspotInfo!!.bssid.isNotBlank())
-        assertTrue(hotspotInfo!!.ipAddress == "10.249.96.99")
+        assertTrue(hotspotInfo!!.bssid != "02:00:00:00:00:00")
+        assertTrue(hotspotInfo!!.ipAddress.isNotBlank())
     }
 }

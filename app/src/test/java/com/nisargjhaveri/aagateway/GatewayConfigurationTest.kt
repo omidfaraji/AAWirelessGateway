@@ -44,6 +44,29 @@ class GatewayConfigurationTest {
     }
 
     @Test
+    fun requiresLocationPermissionsForNativeModeWhenRequested() {
+        val configuration = configuration(nativeConnectionFlow = true)
+
+        assertEquals(
+            "Grant precise location access",
+            configuration.validationError(
+                bluetoothPermissionGranted = true,
+                nearbyWifiPermissionGranted = true,
+                locationPermissionGranted = false,
+            ),
+        )
+        assertEquals(
+            "Grant background location access",
+            configuration.validationError(
+                bluetoothPermissionGranted = true,
+                nearbyWifiPermissionGranted = true,
+                locationPermissionGranted = true,
+                backgroundLocationPermissionGranted = false,
+            ),
+        )
+    }
+
+    @Test
     fun validatesLegacyHotspotCredentials() {
         val configuration =
             configuration(
