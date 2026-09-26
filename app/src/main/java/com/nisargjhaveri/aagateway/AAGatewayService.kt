@@ -134,6 +134,7 @@ class AAGatewayService : Service() {
             configuration.hotspotSsid,
             configuration.hotspotPassphrase,
             configuration.hotspotBssid,
+            configuration.hotspotIpAddress,
             mNativeConnectionFlow
         ) { wifiSuccess, wifiHotspotInfo ->
             if (!isRunning()) {

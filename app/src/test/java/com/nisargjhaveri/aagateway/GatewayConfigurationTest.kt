@@ -61,11 +61,29 @@ class GatewayConfigurationTest {
         )
     }
 
+    @Test
+    fun rejectsInvalidHotspotGatewayAddress() {
+        val configuration =
+            configuration(
+                nativeConnectionFlow = true,
+                hotspotIpAddress = "not-an-address",
+            )
+
+        assertEquals(
+            "Enter a valid hotspot gateway IPv4 address",
+            configuration.validationError(
+                bluetoothPermissionGranted = true,
+                nearbyWifiPermissionGranted = true,
+            ),
+        )
+    }
+
     private fun configuration(
         clientAddress: String? = "80:39:8C:23:85:9F",
         nativeConnectionFlow: Boolean = true,
         hotspotSsid: String = "",
         hotspotPassphrase: String = "",
+        hotspotIpAddress: String? = null,
     ): GatewayConfiguration {
         return GatewayConfiguration(
             clientAddress = clientAddress,
@@ -73,6 +91,7 @@ class GatewayConfigurationTest {
             hotspotSsid = hotspotSsid,
             hotspotPassphrase = hotspotPassphrase,
             hotspotBssid = null,
+            hotspotIpAddress = hotspotIpAddress,
             clientHandshakeTimeoutSeconds = 15,
             clientConnectionTimeoutSeconds = 60,
         )

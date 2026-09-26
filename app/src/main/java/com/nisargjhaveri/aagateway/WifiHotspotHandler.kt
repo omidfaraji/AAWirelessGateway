@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import org.lsposed.hiddenapibypass.HiddenApiBypass
 import java.lang.reflect.Method
 import java.net.Inet4Address
 import java.net.NetworkInterface
@@ -51,6 +52,7 @@ class WifiHotspotHandler(context: Context) {
         configuredSsid: String,
         configuredPassphrase: String,
         configuredBssid: String?,
+        configuredIpAddress: String?,
         useNativeConnectionFlow: Boolean,
         callback: (success: Boolean, wifiHotspotInfo: WifiHotspotInfo?) -> Unit,
     ) {
@@ -58,12 +60,13 @@ class WifiHotspotHandler(context: Context) {
         startCompleted = AtomicBoolean(false)
 
         if (useNativeConnectionFlow) {
-            startLocalOnlyHotspot(callback)
+            startLocalOnlyHotspot(configuredIpAddress, callback)
         } else {
             startConfiguredTethering(
                 configuredSsid,
                 configuredPassphrase,
                 configuredBssid,
+                configuredIpAddress,
                 callback,
             )
         }
@@ -81,6 +84,7 @@ class WifiHotspotHandler(context: Context) {
     }
 
     private fun startLocalOnlyHotspot(
+        configuredIpAddress: String?,
         callback: (success: Boolean, wifiHotspotInfo: WifiHotspotInfo?) -> Unit
     ) {
         try {
@@ -90,6 +94,7 @@ class WifiHotspotHandler(context: Context) {
                         localOnlyHotspotReservation = reservation
                         waitForHotspotInterface(
                             credentialsFrom(reservation),
+                            configuredIpAddress,
                             System.currentTimeMillis() + HOTSPOT_START_TIMEOUT_MS,
                             callback,
                         )
@@ -130,7 +135,7 @@ class WifiHotspotHandler(context: Context) {
             HotspotCredentials(
                 configuration.ssid.orEmpty(),
                 configuration.passphrase.orEmpty(),
-                configuration.bssid?.toString(),
+                configuration.bssid?.toString() ?: persistentRandomizedBssid(configuration),
             )
         } else {
             val configuration: WifiConfiguration =
@@ -144,12 +149,33 @@ class WifiHotspotHandler(context: Context) {
         }
     }
 
+    private fun persistentRandomizedBssid(configuration: SoftApConfiguration): String? {
+        return try {
+            HiddenApiBypass.addHiddenApiExemptions("Landroid/net/wifi/SoftApConfiguration;")
+            configuration.javaClass
+                .getDeclaredMethod("getPersistentRandomizedMacAddress")
+                .invoke(configuration)
+                ?.toString()
+        } catch (exception: ReflectiveOperationException) {
+            Log.e(LOG_TAG, "Could not read the local-only hotspot BSSID", exception)
+            null
+        } catch (exception: RuntimeException) {
+            Log.e(LOG_TAG, "Could not read the local-only hotspot BSSID", exception)
+            null
+        } finally {
+            HiddenApiBypass.clearHiddenApiExemptions()
+        }
+    }
+
     private fun waitForHotspotInterface(
         credentials: HotspotCredentials,
+        configuredIpAddress: String?,
         deadlineMs: Long,
         callback: (success: Boolean, wifiHotspotInfo: WifiHotspotInfo?) -> Unit,
     ) {
-        val endpoint = findHotspotEndpoint()
+        val endpoint =
+            findHotspotEndpoint()
+                ?: configuredIpAddress?.let { HotspotEndpoint(it, hardwareAddress = null) }
         val bssid = credentials.bssid ?: endpoint?.hardwareAddress
 
         if (
@@ -180,7 +206,14 @@ class WifiHotspotHandler(context: Context) {
         }
 
         mainHandler.postDelayed(
-            { waitForHotspotInterface(credentials, deadlineMs, callback) },
+            {
+                waitForHotspotInterface(
+                    credentials,
+                    configuredIpAddress,
+                    deadlineMs,
+                    callback,
+                )
+            },
             INTERFACE_POLL_INTERVAL_MS,
         )
     }
@@ -200,11 +233,11 @@ class WifiHotspotHandler(context: Context) {
 
         return Collections.list(NetworkInterface.getNetworkInterfaces())
             .asSequence()
-            .filter { it.isUp && !it.isLoopback && it.name !in clientInterfaces }
-            .sortedByDescending {
-                it.name.startsWith("ap") ||
-                    it.name.startsWith("swlan") ||
-                    it.name.startsWith("wlan")
+            .filter {
+                it.isUp &&
+                    !it.isLoopback &&
+                    it.name !in clientInterfaces &&
+                    isPotentialHotspotInterface(it.name)
             }
             .mapNotNull { networkInterface ->
                 val address =
@@ -220,6 +253,10 @@ class WifiHotspotHandler(context: Context) {
             .firstOrNull()
     }
 
+    private fun isPotentialHotspotInterface(name: String): Boolean {
+        return name.matches(Regex("^(ap|swlan|wlan)\\d+$", RegexOption.IGNORE_CASE))
+    }
+
     private fun completeStart(
         callback: (success: Boolean, wifiHotspotInfo: WifiHotspotInfo?) -> Unit,
         info: WifiHotspotInfo?,
@@ -233,10 +270,17 @@ class WifiHotspotHandler(context: Context) {
         ssid: String,
         passphrase: String,
         bssid: String?,
+        ipAddress: String?,
         callback: (success: Boolean, wifiHotspotInfo: WifiHotspotInfo?) -> Unit,
     ) {
         if (ssid.isBlank() || passphrase.isBlank()) {
             completeStart(callback, null)
+            return
+        }
+
+        resolveHotspotEndpoint(ipAddress)?.let {
+            legacyHotspotStarted = true
+            completeStart(callback, configuredHotspotInfo(ssid, passphrase, bssid, it))
             return
         }
 
@@ -258,6 +302,7 @@ class WifiHotspotHandler(context: Context) {
                                     ssid,
                                     passphrase,
                                     bssid,
+                                    ipAddress,
                                     System.currentTimeMillis() + HOTSPOT_START_TIMEOUT_MS,
                                     callback,
                                 )
@@ -291,10 +336,11 @@ class WifiHotspotHandler(context: Context) {
         ssid: String,
         passphrase: String,
         bssid: String?,
+        ipAddress: String?,
         deadlineMs: Long,
         callback: (success: Boolean, wifiHotspotInfo: WifiHotspotInfo?) -> Unit,
     ) {
-        findHotspotEndpoint()?.let {
+        resolveHotspotEndpoint(ipAddress)?.let {
             completeStart(callback, configuredHotspotInfo(ssid, passphrase, bssid, it))
             return
         }
@@ -307,9 +353,23 @@ class WifiHotspotHandler(context: Context) {
         }
 
         mainHandler.postDelayed(
-            { waitForConfiguredHotspot(ssid, passphrase, bssid, deadlineMs, callback) },
+            {
+                waitForConfiguredHotspot(
+                    ssid,
+                    passphrase,
+                    bssid,
+                    ipAddress,
+                    deadlineMs,
+                    callback,
+                )
+            },
             INTERFACE_POLL_INTERVAL_MS,
         )
+    }
+
+    private fun resolveHotspotEndpoint(configuredIpAddress: String?): HotspotEndpoint? {
+        return findHotspotEndpoint()
+            ?: configuredIpAddress?.let { HotspotEndpoint(it, hardwareAddress = null) }
     }
 
     private fun configuredHotspotInfo(

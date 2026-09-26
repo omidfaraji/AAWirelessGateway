@@ -2,9 +2,9 @@ package com.nisargjhaveri.aagateway
 
 import android.Manifest
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
-import android.content.SharedPreferences
 
 data class GatewayConfiguration(
     val clientAddress: String?,
@@ -12,6 +12,7 @@ data class GatewayConfiguration(
     val hotspotSsid: String,
     val hotspotPassphrase: String,
     val hotspotBssid: String?,
+    val hotspotIpAddress: String?,
     val clientHandshakeTimeoutSeconds: Int,
     val clientConnectionTimeoutSeconds: Int,
 ) {
@@ -29,6 +30,8 @@ data class GatewayConfiguration(
                     preferences.getString("hotspot_password", "").orEmpty(),
                 hotspotBssid =
                     preferences.getString("hotspot_bssid", null)?.ifBlank { null },
+                hotspotIpAddress =
+                    preferences.getString("hotspot_ip_address", null)?.ifBlank { null },
                 clientHandshakeTimeoutSeconds =
                     preferences.getInt("client_handshake_timeout", 15),
                 clientConnectionTimeoutSeconds =
@@ -61,6 +64,9 @@ data class GatewayConfiguration(
                 return "Enter a valid hotspot BSSID"
             }
         }
+        if (hotspotIpAddress != null && !isIpv4Address(hotspotIpAddress)) {
+            return "Enter a valid hotspot gateway IPv4 address"
+        }
         if (clientHandshakeTimeoutSeconds !in 5..60) {
             return "Set the client handshake timeout between 5 and 60 seconds"
         }
@@ -68,6 +74,16 @@ data class GatewayConfiguration(
             return "Set the client connection timeout between 15 and 180 seconds"
         }
         return null
+    }
+
+    private fun isIpv4Address(value: String): Boolean {
+        val octets = value.split('.')
+        return octets.size == 4 &&
+            octets.all { octet ->
+                octet.isNotEmpty() &&
+                    octet.all(Char::isDigit) &&
+                    octet.toIntOrNull() in 0..255
+            }
     }
 }
 

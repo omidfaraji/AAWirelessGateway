@@ -66,6 +66,12 @@
             app:disableDependentsState="true" />
 
         <EditTextPreference
+            app:key="hotspot_ip_address"
+            app:title="Hotspot gateway IP address"
+            app:summary="Optional fallback for Android versions that hide the hotspot address."
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
             app:key="hotspot_ssid"
             app:title="Legacy hotspot SSID"
             app:useSimpleSummaryProvider="true"
