@@ -5,11 +5,13 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.net.Network
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.os.*
 import android.util.Log
+import androidx.core.app.ServiceCompat
 import androidx.preference.PreferenceManager
 import java.lang.Exception
 import java.net.*
@@ -51,7 +53,16 @@ class AAWirelessClientService : Service() {
             notificationBuilder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         }
 
-        startForeground(NOTIFICATION_ID, notificationBuilder.build())
+        ServiceCompat.startForeground(
+            this,
+            NOTIFICATION_ID,
+            notificationBuilder.build(),
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            } else {
+                0
+            }
+        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

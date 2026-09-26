@@ -20,6 +20,8 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
@@ -66,8 +68,14 @@
             <meta-data android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED" android:resource="@xml/accessory_filter"/>
         </activity>
 
-        <service android:name=".AAGatewayService" />
-        <service android:name=".AAWirelessClientService" />
+        <service
+            android:name=".AAGatewayService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+        <service
+            android:name=".AAWirelessClientService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
 
         <receiver
             android:name=".BluetoothReceiver"
