@@ -115,54 +115,59 @@ class AAGatewayService : Service() {
         mHotspotStarted = false
 
         val preferences = PreferenceManager.getDefaultSharedPreferences(this)
-        val clientAddress = preferences.getString("client_bt_mac", null)
+        val configuration = GatewayConfiguration.from(preferences)
+        configuration.validationError(this)?.let { error ->
+            Log.e(LOG_TAG, error)
+            updateNotification(error)
+            stopService()
+            return START_NOT_STICKY
+        }
 
-        mNativeConnectionFlow = preferences.getBoolean("native_connection_flow", true)
+        mNativeConnectionFlow = configuration.nativeConnectionFlow
         mUsbFallback = preferences.getBoolean("usb_fallback", false)
-        mClientHandshakeTimeout = preferences.getInt("client_handshake_timeout", 15)
-        mClientConnectionTimeout = preferences.getInt("client_connection_timeout", 60)
+        mClientHandshakeTimeout = configuration.clientHandshakeTimeoutSeconds
+        mClientConnectionTimeout = configuration.clientConnectionTimeoutSeconds
 
-        val hotspotSsid = preferences.getString("hotspot_ssid", null) ?: ""
-        val hotspotPassphrase = preferences.getString("hotspot_password", null) ?: ""
-        val hotspotBssid = preferences.getString("hotspot_bssid", null)?.ifEmpty { null }
-
-        clientAddress?.also { address ->
-            updateNotification("Starting wifi hotspot")
-            mWifiHotspotHandler.start(
-                hotspotSsid,
-                hotspotPassphrase,
-                hotspotBssid,
-                mNativeConnectionFlow
-            ) { wifiSuccess, wifiHotspotInfo ->
-                if (!isRunning()) {
-                    if (wifiSuccess) {
-                        mWifiHotspotHandler.stop()
-                    }
-                    return@start
-                }
-
+        val clientAddress = requireNotNull(configuration.clientAddress)
+        updateNotification("Starting wifi hotspot")
+        mWifiHotspotHandler.start(
+            configuration.hotspotSsid,
+            configuration.hotspotPassphrase,
+            configuration.hotspotBssid,
+            mNativeConnectionFlow
+        ) { wifiSuccess, wifiHotspotInfo ->
+            if (!isRunning()) {
                 if (wifiSuccess) {
-                    mHotspotStarted = true
+                    mWifiHotspotHandler.stop()
+                }
+                return@start
+            }
 
-                    updateNotification("Waiting for wireless client")
+            if (wifiSuccess) {
+                mHotspotStarted = true
 
-                    if (mNativeConnectionFlow) {
-                        mAABluetoothProfileHandler.connectDevice(address, mClientHandshakeTimeout * 1000L, wifiHotspotInfo!!) { success ->
+                updateNotification("Waiting for wireless client")
+
+                if (mNativeConnectionFlow) {
+                    mAABluetoothProfileHandler.connectDevice(
+                        clientAddress,
+                        mClientHandshakeTimeout * 1000L,
+                        wifiHotspotInfo!!,
+                    ) { success ->
+                        if (isRunning()) {
                             onInitialHandshake(success, 0)
                         }
                     }
-                    else {
-                        mBluetoothHandler.connectDevice(address) { msg ->
-                            Log.d(LOG_TAG, "Bluetooth: $msg")
-                        }
+                } else {
+                    mBluetoothHandler.connectDevice(clientAddress) { msg ->
+                        Log.d(LOG_TAG, "Bluetooth: $msg")
                     }
+                }
 
-                    mMainHandlerThread.start()
-                }
-                else {
-                    Log.e(LOG_TAG, "Could not start wifi hotspot")
-                    stopService()
-                }
+                mMainHandlerThread.start()
+            } else {
+                Log.e(LOG_TAG, "Could not start wifi hotspot")
+                stopService()
             }
         }
 

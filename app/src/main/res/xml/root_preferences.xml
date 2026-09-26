@@ -61,23 +61,24 @@
         <SwitchPreferenceCompat
             app:key="native_connection_flow"
             app:title="Native AA connection"
-            app:summary="Use native Wireless Android Auto connection flow."
-            app:defaultValue="true" />
+            app:summary="Use native Wireless Android Auto connection flow with a generated local hotspot."
+            app:defaultValue="true"
+            app:disableDependentsState="true" />
 
         <EditTextPreference
             app:key="hotspot_ssid"
-            app:title="Hotspot SSID"
+            app:title="Legacy hotspot SSID"
             app:useSimpleSummaryProvider="true"
             app:dependency="native_connection_flow" />
 
         <EditTextPreference
             app:key="hotspot_password"
-            app:title="Hotspot password"
+            app:title="Legacy hotspot password"
             app:dependency="native_connection_flow" />
 
         <EditTextPreference
             app:key="hotspot_bssid"
-            app:title="Hotspot BSSID"
+            app:title="Legacy hotspot BSSID"
             app:useSimpleSummaryProvider="true"
             app:dependency="native_connection_flow" />
 

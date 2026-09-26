@@ -5,6 +5,8 @@ import android.hardware.usb.UsbAccessory
 import android.hardware.usb.UsbManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.widget.Toast
+import androidx.core.content.IntentCompat
 import androidx.preference.PreferenceManager
 
 class USBReceiverActivity : AppCompatActivity() {
@@ -20,8 +22,20 @@ class USBReceiverActivity : AppCompatActivity() {
             val preferences = PreferenceManager.getDefaultSharedPreferences(this)
 
             if (preferences.getBoolean("is_gateway", false)) {
-                // Start foreground service if gateway mode is enabled
-                val accessory = intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY) as UsbAccessory?
+                val configuration = GatewayConfiguration.from(preferences)
+                configuration.validationError(this)?.let { error ->
+                    Toast.makeText(this, error, Toast.LENGTH_LONG).show()
+                    startActivity(Intent(this, MainActivity::class.java))
+                    finish()
+                    return
+                }
+
+                val accessory =
+                    IntentCompat.getParcelableExtra(
+                        intent,
+                        UsbManager.EXTRA_ACCESSORY,
+                        UsbAccessory::class.java,
+                    )
 
                 accessory?.also { usbAccessory ->
                     val i = Intent(this, AAGatewayService::class.java)
@@ -30,7 +44,6 @@ class USBReceiverActivity : AppCompatActivity() {
                 }
             }
             else {
-                // Gateway mode is not enabled, open settings
                 this.startActivity(Intent(this, MainActivity::class.java))
             }
         }
