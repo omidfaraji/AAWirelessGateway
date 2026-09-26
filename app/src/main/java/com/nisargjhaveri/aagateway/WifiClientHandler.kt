@@ -42,6 +42,14 @@ class WifiClientHandler(context: Context, activityResultCaller: ActivityResultCa
             callback?.invoke(false)
         }
     }
+    private val mRequestNearbyWifiPermissionLauncher =
+        mActivityResultCaller?.registerForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { isGranted ->
+            val callback = mRequestPermissionsCallback
+            mRequestPermissionsCallback = null
+            callback?.invoke(isGranted)
+        }
 
     private inner class NetworkCallback: ConnectivityManager.NetworkCallback {
         constructor(): super()
@@ -215,6 +223,12 @@ class WifiClientHandler(context: Context, activityResultCaller: ActivityResultCa
                 || mContext.checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
     }
 
+    fun hasNearbyWifiPermission(): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            mContext.checkSelfPermission(Manifest.permission.NEARBY_WIFI_DEVICES) ==
+                PackageManager.PERMISSION_GRANTED
+    }
+
     fun requestLocationPermissions(callback: ((success: Boolean) -> Unit)?) {
         mRequestPermissionsLauncher?.let {
             mRequestPermissionsCallback = callback
@@ -231,6 +245,18 @@ class WifiClientHandler(context: Context, activityResultCaller: ActivityResultCa
         mRequestPermissionsLauncher?.let {
             mRequestPermissionsCallback = callback
             it.launch(arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION))
+        }
+    }
+
+    fun requestNearbyWifiPermission(callback: ((success: Boolean) -> Unit)?) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            callback?.invoke(true)
+            return
+        }
+
+        mRequestNearbyWifiPermissionLauncher?.let {
+            mRequestPermissionsCallback = callback
+            it.launch(Manifest.permission.NEARBY_WIFI_DEVICES)
         }
     }
 }

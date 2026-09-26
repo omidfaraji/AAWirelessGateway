@@ -128,7 +128,12 @@ class AAGatewayService : Service() {
 
         clientAddress?.also { address ->
             updateNotification("Starting wifi hotspot")
-            mWifiHotspotHandler.start(hotspotSsid, hotspotPassphrase, hotspotBssid) { wifiSuccess, wifiHotspotInfo ->
+            mWifiHotspotHandler.start(
+                hotspotSsid,
+                hotspotPassphrase,
+                hotspotBssid,
+                mNativeConnectionFlow
+            ) { wifiSuccess, wifiHotspotInfo ->
                 if (wifiSuccess) {
                     mHotspotStarted = true
 

@@ -84,6 +84,14 @@ class SettingsFragment : PreferenceFragmentCompat() {
                         requestLocationPermissions {
                             updateSettingsState(context)
                         }
+                        findPreference<Preference>("nearby_wifi_permissions")?.apply {
+                            setOnPreferenceClickListener {
+                                mWifiClientHandler?.requestNearbyWifiPermission {
+                                    updateSettingsState(context)
+                                }
+                                true
+                            }
+                        }
                     }
                     else if (!hasBackgroundLocationPermission()) {
                         requestBackgroundLocationPermissions {
@@ -186,6 +194,21 @@ class SettingsFragment : PreferenceFragmentCompat() {
             else
                 "Already granted"
             icon = if (isEnabled) mErrorIcon else if (hasLocationPermissions && hasBackgroundLocationPermissions) mDoneIcon else null
+        }
+        findPreference<Preference>("nearby_wifi_permissions")?.apply {
+            if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) {
+                isVisible = false
+                return@apply
+            }
+
+            isEnabled = !(mWifiClientHandler?.hasNearbyWifiPermission() ?: false)
+            summary =
+                if (isEnabled) {
+                    "Required to create or connect to the gateway hotspot"
+                } else {
+                    "Already granted"
+                }
+            icon = if (isEnabled) mErrorIcon else mDoneIcon
         }
 
         val manageUSBPermissionGranted = context.checkSelfPermission("android.permission.MANAGE_USB") == PackageManager.PERMISSION_GRANTED

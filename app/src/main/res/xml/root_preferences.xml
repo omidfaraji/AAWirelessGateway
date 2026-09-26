@@ -113,6 +113,10 @@
             app:title="Bluetooth Permissions" />
 
         <Preference
+            app:key="nearby_wifi_permissions"
+            app:title="Nearby Wi-Fi Permissions" />
+
+        <Preference
             app:key="location_permissions"
             app:title="Location Permissions"
             app:dependency="is_wireless_client"/>
