@@ -28,7 +28,9 @@ class AAWirelessClientService : Service() {
         private const val INSUFFICIENT_BATTERY = 2
     }
 
-    private var mRunning = false
+    @Volatile private var mRunning = false
+    private var mWifiClientHandler: WifiClientHandler? = null
+    @Volatile private var mControlSocket: Socket? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -68,9 +70,10 @@ class AAWirelessClientService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
 
-        if (mRunning) return START_STICKY
+        if (mRunning) return START_NOT_STICKY
 
         updateNotification("Started")
+        mRunning = true
 
         val preferences = PreferenceManager.getDefaultSharedPreferences(this)
 
@@ -81,7 +84,7 @@ class AAWirelessClientService : Service() {
 
         if (ssid == null || password == null) {
             stopService("Wifi settings not found")
-            return START_STICKY
+            return START_NOT_STICKY
         }
 
         val connectionBatteryLimit = preferences.getInt("connection_battery_limit", 0)
@@ -100,6 +103,7 @@ class AAWirelessClientService : Service() {
         }
 
         val wifiClientHandler = WifiClientHandler(this, null)
+        mWifiClientHandler = wifiClientHandler
 
         wifiClientHandler.onLost {
             stopService("Wifi connection lost")
@@ -107,6 +111,11 @@ class AAWirelessClientService : Service() {
 
         updateNotification("Connecting to gateway wifi")
         wifiClientHandler.connect(ssid, password, bssid, 60000) { success, msg, network, wifiInfo ->
+            if (!mRunning) {
+                wifiClientHandler.disconnect()
+                return@connect
+            }
+
             if (success) {
                 val addressInt = getSystemService(WifiManager::class.java).dhcpInfo.gateway
                 val address = "%d.%d.%d.%d".format(null,
@@ -135,22 +144,32 @@ class AAWirelessClientService : Service() {
             }
         }
 
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     private fun stopService(msg: String) {
         updateNotification(msg)
-        stopForeground(false)
+        mRunning = false
+        mWifiClientHandler?.disconnect()
+        mWifiClientHandler = null
+        mControlSocket?.runCatching { close() }
+        mControlSocket = null
+        stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
     override fun onBind(p0: Intent?): IBinder? {
-        TODO("Not yet implemented")
+        return null
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         mRunning = false
+        mWifiClientHandler?.disconnect()
+        mWifiClientHandler = null
+        mControlSocket?.runCatching { close() }
+        mControlSocket = null
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        super.onDestroy()
     }
 
     private fun connectControlChannel(address: String, network: Network?, connectionRejectionReason: Int, callback: () -> Unit) {
@@ -158,14 +177,18 @@ class AAWirelessClientService : Service() {
             kotlin.run {
                 try {
                     val socket = Socket()
+                    mControlSocket = socket
                     network?.bindSocket(socket)
 
                     socket.connect(InetSocketAddress(address, 5287))
 
                     socket.getOutputStream().write(connectionRejectionReason)
                     socket.close()
+                    mControlSocket = null
 
-                    Handler(mainLooper).post(callback)
+                    if (mRunning) {
+                        Handler(mainLooper).post(callback)
+                    }
                 }
                 catch (e: Exception) {
                     Log.e(LOG_TAG, "Error in handshake: ${e.message}")

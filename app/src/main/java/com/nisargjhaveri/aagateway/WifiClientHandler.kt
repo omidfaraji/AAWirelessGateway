@@ -21,6 +21,7 @@ class WifiClientHandler(context: Context, activityResultCaller: ActivityResultCa
     private var mIsConnecting = false
     private var mIsConnected = false
     private var mIsSpecificRequest = false
+    private var mCallbackRegistered = false
 
     private val mConnectivityManager: ConnectivityManager by lazy { mContext.getSystemService(ConnectivityManager::class.java) }
     private val mWifiManager: WifiManager by lazy { mContext.getSystemService(WifiManager::class.java) }
@@ -191,6 +192,7 @@ class WifiClientHandler(context: Context, activityResultCaller: ActivityResultCa
 
         mIsConnecting = true
         mConnectivityManager.requestNetwork(request.build(), mNetworkCallback, timeoutMs)
+        mCallbackRegistered = true
 
         Handler(Looper.getMainLooper()).postDelayed({
             if (mIsConnecting && !mIsConnected) {
@@ -208,7 +210,10 @@ class WifiClientHandler(context: Context, activityResultCaller: ActivityResultCa
     }
 
     fun disconnect() {
-        mConnectivityManager.unregisterNetworkCallback(mNetworkCallback)
+        if (mCallbackRegistered) {
+            runCatching { mConnectivityManager.unregisterNetworkCallback(mNetworkCallback) }
+            mCallbackRegistered = false
+        }
         mIsConnecting = false
         mIsConnected = false
     }

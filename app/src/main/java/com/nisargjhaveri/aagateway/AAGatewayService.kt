@@ -32,7 +32,7 @@ class AAGatewayService : Service() {
 
     private var mLogCommunication = false
 
-    private var mRunning = false
+    @Volatile private var mRunning = false
 
     private var mAccessory: UsbAccessory? = null
 
@@ -42,9 +42,9 @@ class AAGatewayService : Service() {
     private var mSocketInputStream: DataInputStream? = null
     private var mSocketOutputStream: OutputStream? = null
 
-    private var mUsbComplete = false
-    private var mLocalComplete = false
-    private var mHotspotStarted = false
+    @Volatile private var mUsbComplete = false
+    @Volatile private var mLocalComplete = false
+    @Volatile private var mHotspotStarted = false
 
     private var mNativeConnectionFlow = true
     private var mUsbFallback = false
@@ -97,7 +97,7 @@ class AAGatewayService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
 
-        if (isRunning()) return START_REDELIVER_INTENT
+        if (isRunning()) return START_NOT_STICKY
 
         updateNotification("Started")
 
@@ -105,7 +105,7 @@ class AAGatewayService : Service() {
         if (mAccessory == null) {
             Log.e(LOG_TAG, "No USB accessory found")
             stopService()
-            return START_REDELIVER_INTENT
+            return START_NOT_STICKY
         }
 
         //Manually start AA.
@@ -134,6 +134,13 @@ class AAGatewayService : Service() {
                 hotspotBssid,
                 mNativeConnectionFlow
             ) { wifiSuccess, wifiHotspotInfo ->
+                if (!isRunning()) {
+                    if (wifiSuccess) {
+                        mWifiHotspotHandler.stop()
+                    }
+                    return@start
+                }
+
                 if (wifiSuccess) {
                     mHotspotStarted = true
 
@@ -159,7 +166,7 @@ class AAGatewayService : Service() {
             }
         }
 
-        return START_REDELIVER_INTENT
+        return START_NOT_STICKY
     }
 
     private fun onInitialHandshake(success: Boolean, rejectReason: Int) {
@@ -208,9 +215,13 @@ class AAGatewayService : Service() {
     }
 
     private fun stopService() {
+        mRunning = false
+        mMainHandlerThread.cancel()
+        mAABluetoothProfileHandler.cleanup()
+        closeStreams()
         stopHotspot()
 
-        stopForeground(true)
+        stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
@@ -228,12 +239,27 @@ class AAGatewayService : Service() {
     private fun isRunning() = mRunning
 
     override fun onBind(p0: Intent?): IBinder? {
-        TODO("Not yet implemented")
+        return null
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         stopRunning("Service onDestroy")
+        mAABluetoothProfileHandler.cleanup()
+        closeStreams()
+        stopHotspot()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        super.onDestroy()
+    }
+
+    private fun closeStreams() {
+        mPhoneInputStream?.runCatching { close() }
+        mPhoneInputStream = null
+        mPhoneOutputStream?.runCatching { close() }
+        mPhoneOutputStream = null
+        mSocketInputStream?.runCatching { close() }
+        mSocketInputStream = null
+        mSocketOutputStream?.runCatching { close() }
+        mSocketOutputStream = null
     }
 
     private inner class MainHandlerThread: Thread() {
@@ -476,12 +502,18 @@ class AAGatewayService : Service() {
 
     private inner class TCPControlThread: Thread() {
         var mServerSocket: ServerSocket? = null
+        var mSocket: Socket? = null
 
         fun cancel() {
             mServerSocket?.runCatching {
                 close()
             }
             mServerSocket = null
+
+            mSocket?.runCatching {
+                close()
+            }
+            mSocket = null
         }
 
         override fun run() {
@@ -497,7 +529,7 @@ class AAGatewayService : Service() {
                 }
 
                 mServerSocket?.let {
-                    it.accept().apply {
+                    mSocket = it.accept().apply {
                         soTimeout = 10000
 
                         success = true
@@ -505,6 +537,7 @@ class AAGatewayService : Service() {
 
                         close()
                     }
+                    mSocket = null
                 }
 
                 mServerSocket?.runCatching {
