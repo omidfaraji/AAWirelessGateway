@@ -8,10 +8,13 @@ import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
+import java.net.NetworkInterface
+import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Rule
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -65,5 +68,18 @@ class WifiHotspotHandlerTest {
         assertTrue(hotspotInfo!!.bssid.isNotBlank())
         assertTrue(hotspotInfo!!.bssid != "02:00:00:00:00:00")
         assertTrue(hotspotInfo!!.ipAddress.isNotBlank())
+
+        val hotspotInterface =
+            Collections.list(NetworkInterface.getNetworkInterfaces()).firstOrNull {
+                networkInterface ->
+                Collections.list(networkInterface.inetAddresses).any {
+                    it.hostAddress == hotspotInfo!!.ipAddress
+                }
+            }
+        hotspotInterface?.let {
+            val activeBssid = it.hotspotHardwareAddress()
+            assertNotNull(activeBssid)
+            assertEquals(activeBssid, hotspotInfo!!.bssid)
+        }
     }
 }
