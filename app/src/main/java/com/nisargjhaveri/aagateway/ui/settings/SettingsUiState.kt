@@ -3,10 +3,12 @@ package com.nisargjhaveri.aagateway.ui.settings
 import android.Manifest
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.provider.Settings
 import com.nisargjhaveri.aagateway.BluetoothHandler
 import com.nisargjhaveri.aagateway.GatewayConfiguration
+import com.nisargjhaveri.aagateway.PrivilegedSystemAppInstaller
 import com.nisargjhaveri.aagateway.WifiClientHandler
 import com.nisargjhaveri.aagateway.validationError
 
@@ -36,6 +38,8 @@ data class SettingsUiState(
     val writeSettingsGranted: Boolean,
     val overlayPermissionGranted: Boolean,
     val manageUsbPermissionGranted: Boolean,
+    val systemAppInstalled: Boolean,
+    val privilegedInstallTransition: String?,
     val bluetoothEnabled: Boolean,
     val pairedDevices: List<BluetoothHandler.BluetoothDeviceInfo>,
     val setupProblem: String?,
@@ -121,6 +125,15 @@ data class SettingsUiState(
                 manageUsbPermissionGranted =
                     context.checkSelfPermission("android.permission.MANAGE_USB") ==
                         PackageManager.PERMISSION_GRANTED,
+                systemAppInstalled =
+                    context.applicationInfo.flags and
+                        (ApplicationInfo.FLAG_SYSTEM or
+                            ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0,
+                privilegedInstallTransition =
+                    preferences.getString(
+                        PrivilegedSystemAppInstaller.PREFERENCE_INSTALL_TRANSITION,
+                        null,
+                    ),
                 bluetoothEnabled = bluetoothEnabled,
                 pairedDevices =
                     if (bluetoothPermissionGranted) {

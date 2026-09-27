@@ -20,8 +20,10 @@ setup, troubleshooting, compatibility, and build guides.
 - Bluetooth pairing between the two phones
 - A reliable USB data cable
 
-Root is **not required** for the recommended setup. It is only used by the optional fallback that
-starts wired Android Auto directly on the gateway phone.
+Root is **not required** for the recommended setup. On phones with Magisk-compatible root,
+**Privileged USB access** can install a systemless module that enables the optional wired Android
+Auto fallback after a reboot. The **System app status** control shows the current state and can
+return the app to a normal installation, also followed by a reboot.
 
 ## Recommended setup
 
@@ -52,6 +54,18 @@ Use this only if the native connection does not work:
 4. On the main phone, enable **Wireless client - main phone**.
 5. Enter the gateway hotspot details and select the gateway phone.
 6. Grant all requested permissions until both apps report **Ready to connect**.
+
+## Rooted gateway phones
+
+The **System app status** control manages privileged installation directly from the app:
+
+- **Normal app** - tap to create and install the Magisk module.
+- **Privileged system app** - tap to remove the app's Magisk module.
+- **Restart required** - tap to reopen the restart action and finish the transition.
+
+Each operation requires explicit root approval. Removing the module keeps the normal app and its
+settings installed. Privileged installation is only needed for the optional wired Android Auto
+fallback.
 
 ## How it works
 

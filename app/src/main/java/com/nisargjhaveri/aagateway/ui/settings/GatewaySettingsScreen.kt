@@ -13,10 +13,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -28,8 +30,10 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.preference.PreferenceManager
 import com.nisargjhaveri.aagateway.BluetoothHandler
+import com.nisargjhaveri.aagateway.PrivilegedSystemAppInstaller
 import com.nisargjhaveri.aagateway.WifiClientHandler
 import com.nisargjhaveri.aagateway.ui.components.ActionSettingRow
+import com.nisargjhaveri.aagateway.ui.components.ConfirmationDialog
 import com.nisargjhaveri.aagateway.ui.components.DevicePickerDialog
 import com.nisargjhaveri.aagateway.ui.components.InformationDialog
 import com.nisargjhaveri.aagateway.ui.components.SettingsSection
@@ -38,6 +42,9 @@ import com.nisargjhaveri.aagateway.ui.components.StatusCard
 import com.nisargjhaveri.aagateway.ui.components.TextSettingDialog
 import com.nisargjhaveri.aagateway.ui.components.ToggleSettingRow
 import com.nisargjhaveri.aagateway.ui.components.ValueSettingRow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private data class EditableSetting(
     val key: String,
@@ -66,13 +73,19 @@ fun GatewaySettingsScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
     val preferences = remember { PreferenceManager.getDefaultSharedPreferences(context) }
+    val privilegedSystemAppInstaller = remember { PrivilegedSystemAppInstaller(context) }
     var preferenceRevision by remember { mutableIntStateOf(0) }
     var permissionRevision by remember { mutableIntStateOf(0) }
     var editableSetting by remember { mutableStateOf<EditableSetting?>(null) }
     var deviceSetting by remember { mutableStateOf<DeviceSetting?>(null) }
     var showAdvanced by rememberSaveable { mutableStateOf(false) }
-    var showUsbInformation by remember { mutableStateOf(false) }
+    var showPrivilegedInstallConfirmation by remember { mutableStateOf(false) }
+    var showPrivilegedRemovalConfirmation by remember { mutableStateOf(false) }
+    var privilegedInstallResult by
+        remember { mutableStateOf<PrivilegedSystemAppInstaller.Result?>(null) }
+    var privilegedOperationInProgress by remember { mutableStateOf(false) }
 
     DisposableEffect(preferences) {
         val listener =
@@ -103,6 +116,29 @@ fun GatewaySettingsScreen(
                 wifiClientHandler,
             )
         }
+
+    LaunchedEffect(
+        state.systemAppInstalled,
+        state.privilegedInstallTransition,
+    ) {
+        val transitionCompleted =
+            (
+                state.privilegedInstallTransition ==
+                    PrivilegedSystemAppInstaller.INSTALL_PENDING &&
+                    state.systemAppInstalled
+            ) ||
+                (
+                    state.privilegedInstallTransition ==
+                        PrivilegedSystemAppInstaller.REMOVAL_PENDING &&
+                        !state.systemAppInstalled
+                )
+        if (transitionCompleted) {
+            preferences
+                .edit()
+                .remove(PrivilegedSystemAppInstaller.PREFERENCE_INSTALL_TRANSITION)
+                .apply()
+        }
+    }
 
     fun saveBoolean(key: String, value: Boolean) {
         preferences.edit().putBoolean(key, value).apply()
@@ -487,16 +523,52 @@ fun GatewaySettingsScreen(
                         }
                         if (state.isGateway) {
                             ActionSettingRow(
-                                title = "Privileged USB access",
+                                title = "System app status",
                                 summary =
-                                    if (state.manageUsbPermissionGranted) {
-                                        "Available for wired Android Auto fallback."
-                                    } else {
-                                        "Optional - requires installing as a system app with root."
+                                    if (privilegedOperationInProgress) {
+                                        "Waiting for root approval..."
+                                    } else when (state.privilegedInstallTransition) {
+                                        PrivilegedSystemAppInstaller.INSTALL_PENDING ->
+                                            "Restart required to become a privileged system app."
+                                        PrivilegedSystemAppInstaller.REMOVAL_PENDING ->
+                                            "Restart required to return to a normal app."
+                                        else ->
+                                            when {
+                                                state.systemAppInstalled &&
+                                                    state.manageUsbPermissionGranted ->
+                                                    "Privileged system app - tap to make normal."
+                                                state.systemAppInstalled ->
+                                                    "System app without privileged USB access."
+                                                else ->
+                                                    "Normal app - tap to install with root."
+                                            }
                                     },
-                                completed = state.manageUsbPermissionGranted,
-                                enabled = !state.manageUsbPermissionGranted,
-                                onClick = { showUsbInformation = true },
+                                completed = false,
+                                enabled = !privilegedOperationInProgress,
+                                onClick = {
+                                    when (state.privilegedInstallTransition) {
+                                        PrivilegedSystemAppInstaller.INSTALL_PENDING ->
+                                            privilegedInstallResult =
+                                                PrivilegedSystemAppInstaller.Result(
+                                                    true,
+                                                    "Restart the phone to activate privileged " +
+                                                        "USB access.",
+                                                )
+                                        PrivilegedSystemAppInstaller.REMOVAL_PENDING ->
+                                            privilegedInstallResult =
+                                                PrivilegedSystemAppInstaller.Result(
+                                                    true,
+                                                    "Restart the phone to finish returning the " +
+                                                        "app to a normal installation.",
+                                                )
+                                        else ->
+                                            if (state.systemAppInstalled) {
+                                                showPrivilegedRemovalConfirmation = true
+                                            } else {
+                                                showPrivilegedInstallConfirmation = true
+                                            }
+                                    }
+                                },
                             )
                         }
                     }
@@ -531,15 +603,102 @@ fun GatewaySettingsScreen(
         )
     }
 
-    if (showUsbInformation) {
-        InformationDialog(
-            title = "Privileged USB access",
+    if (showPrivilegedInstallConfirmation) {
+        ConfirmationDialog(
+            title = "Install privileged USB access?",
             message =
-                "This optional permission is only used for wired Android Auto fallback. " +
-                    "Android grants it only to privileged system apps, which normally requires " +
-                    "a rooted gateway phone.",
-            onDismiss = { showUsbInformation = false },
+                "This creates a systemless Magisk module from the currently installed app. " +
+                    "Approve the root request and restart the phone after installation. " +
+                    "The wired Android Auto fallback remains disabled until you enable it.",
+            confirmLabel = "Install",
+            onConfirm = {
+                showPrivilegedInstallConfirmation = false
+                privilegedOperationInProgress = true
+                coroutineScope.launch {
+                    val result =
+                        withContext(Dispatchers.IO) {
+                            privilegedSystemAppInstaller.install()
+                        }
+                    if (result.success) {
+                        preferences
+                            .edit()
+                            .putString(
+                                PrivilegedSystemAppInstaller.PREFERENCE_INSTALL_TRANSITION,
+                                PrivilegedSystemAppInstaller.INSTALL_PENDING,
+                            )
+                            .apply()
+                    }
+                    privilegedOperationInProgress = false
+                    privilegedInstallResult = result
+                }
+            },
+            onDismiss = { showPrivilegedInstallConfirmation = false },
         )
+    }
+
+    if (showPrivilegedRemovalConfirmation) {
+        ConfirmationDialog(
+            title = "Return to normal app?",
+            message =
+                "This marks the AA Wireless Gateway Magisk module for removal. " +
+                    "The installed app and its settings remain available. Restart the phone " +
+                    "afterward to remove privileged USB access.",
+            confirmLabel = "Remove",
+            onConfirm = {
+                showPrivilegedRemovalConfirmation = false
+                privilegedOperationInProgress = true
+                coroutineScope.launch {
+                    val result =
+                        withContext(Dispatchers.IO) {
+                            privilegedSystemAppInstaller.remove()
+                        }
+                    if (result.success) {
+                        preferences
+                            .edit()
+                            .putString(
+                                PrivilegedSystemAppInstaller.PREFERENCE_INSTALL_TRANSITION,
+                                PrivilegedSystemAppInstaller.REMOVAL_PENDING,
+                            )
+                            .apply()
+                    }
+                    privilegedOperationInProgress = false
+                    privilegedInstallResult = result
+                }
+            },
+            onDismiss = { showPrivilegedRemovalConfirmation = false },
+        )
+    }
+
+    privilegedInstallResult?.let { result ->
+        if (result.success) {
+            ConfirmationDialog(
+                title = "Restart required",
+                message = result.message,
+                confirmLabel = "Restart now",
+                dismissLabel = "Later",
+                onConfirm = {
+                    privilegedInstallResult = null
+                    privilegedOperationInProgress = true
+                    coroutineScope.launch {
+                        val rebootResult =
+                            withContext(Dispatchers.IO) {
+                                privilegedSystemAppInstaller.reboot()
+                            }
+                        if (!rebootResult.success) {
+                            privilegedOperationInProgress = false
+                            privilegedInstallResult = rebootResult
+                        }
+                    }
+                },
+                onDismiss = { privilegedInstallResult = null },
+            )
+        } else {
+            InformationDialog(
+                title = "Operation failed",
+                message = result.message,
+                onDismiss = { privilegedInstallResult = null },
+            )
+        }
     }
 }
 
