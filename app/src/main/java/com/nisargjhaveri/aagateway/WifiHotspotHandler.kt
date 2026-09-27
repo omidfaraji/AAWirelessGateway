@@ -14,7 +14,6 @@ import android.util.Log
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 import java.lang.reflect.Method
 import java.net.Inet4Address
-import java.net.Inet6Address
 import java.net.NetworkInterface
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
@@ -183,7 +182,7 @@ class WifiHotspotHandler(context: Context) {
         val endpoint =
             findHotspotEndpoint()
                 ?: configuredIpAddress?.let { HotspotEndpoint(it, hardwareAddress = null) }
-        val bssid = credentials.bssid ?: endpoint?.hardwareAddress
+        val bssid = endpoint?.hardwareAddress ?: credentials.bssid
 
         if (
             credentials.ssid.isNotBlank() &&
@@ -251,37 +250,10 @@ class WifiHotspotHandler(context: Context) {
                     Collections.list(networkInterface.inetAddresses).firstOrNull {
                         it is Inet4Address && it.isSiteLocalAddress
                     } ?: return@mapNotNull null
-                val hardwareAddress =
-                    networkInterface.hardwareAddress?.joinToString(":") {
-                        "%02x".format(it.toInt() and 0xff)
-                    } ?: networkInterface.eui48AddressFromLinkLocalAddress()
+                val hardwareAddress = networkInterface.hotspotHardwareAddress()
                 HotspotEndpoint(address.hostAddress.orEmpty(), hardwareAddress)
             }
             .firstOrNull()
-    }
-
-    private fun NetworkInterface.eui48AddressFromLinkLocalAddress(): String? {
-        val address =
-            Collections.list(inetAddresses)
-                .filterIsInstance<Inet6Address>()
-                .firstOrNull {
-                    val bytes = it.address
-                    it.isLinkLocalAddress &&
-                        bytes[11] == 0xff.toByte() &&
-                        bytes[12] == 0xfe.toByte()
-                }
-                ?.address
-                ?: return null
-        val macAddress =
-            byteArrayOf(
-                (address[8].toInt() xor 0x02).toByte(),
-                address[9],
-                address[10],
-                address[13],
-                address[14],
-                address[15],
-            )
-        return macAddress.joinToString(":") { "%02x".format(it.toInt() and 0xff) }
     }
 
     private fun isPotentialHotspotInterface(name: String): Boolean {
