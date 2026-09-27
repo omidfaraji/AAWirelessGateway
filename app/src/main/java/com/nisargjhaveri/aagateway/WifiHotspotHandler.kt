@@ -11,11 +11,15 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.util.SparseIntArray
 import org.lsposed.hiddenapibypass.HiddenApiBypass
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.util.Collections
+import java.util.UUID
+import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicBoolean
 
 data class WifiHotspotInfo(
@@ -53,6 +57,7 @@ class WifiHotspotHandler(context: Context) {
         configuredPassphrase: String,
         configuredBssid: String?,
         configuredIpAddress: String?,
+        prefer5GhzHotspot: Boolean,
         useNativeConnectionFlow: Boolean,
         callback: (success: Boolean, wifiHotspotInfo: WifiHotspotInfo?) -> Unit,
     ) {
@@ -60,7 +65,12 @@ class WifiHotspotHandler(context: Context) {
         startCompleted = AtomicBoolean(false)
 
         if (useNativeConnectionFlow) {
-            startLocalOnlyHotspot(configuredBssid, configuredIpAddress, callback)
+            startLocalOnlyHotspot(
+                configuredBssid,
+                configuredIpAddress,
+                prefer5GhzHotspot,
+                callback,
+            )
         } else {
             startConfiguredTethering(
                 configuredSsid,
@@ -86,39 +96,146 @@ class WifiHotspotHandler(context: Context) {
     private fun startLocalOnlyHotspot(
         configuredBssid: String?,
         configuredIpAddress: String?,
+        prefer5GhzHotspot: Boolean,
         callback: (success: Boolean, wifiHotspotInfo: WifiHotspotInfo?) -> Unit
     ) {
-        try {
-            wifiManager.startLocalOnlyHotspot(
-                object : WifiManager.LocalOnlyHotspotCallback() {
-                    override fun onStarted(reservation: WifiManager.LocalOnlyHotspotReservation) {
-                        localOnlyHotspotReservation = reservation
-                        val credentials = credentialsFrom(reservation)
-                        waitForHotspotInterface(
-                            credentials.copy(bssid = credentials.bssid ?: configuredBssid),
-                            configuredIpAddress,
-                            System.currentTimeMillis() + HOTSPOT_START_TIMEOUT_MS,
-                            callback,
+        var preferredRequestActive = false
+        lateinit var hotspotCallback: WifiManager.LocalOnlyHotspotCallback
+        hotspotCallback =
+            object : WifiManager.LocalOnlyHotspotCallback() {
+                override fun onStarted(reservation: WifiManager.LocalOnlyHotspotReservation) {
+                    localOnlyHotspotReservation = reservation
+                    val credentials = credentialsFrom(reservation)
+                    waitForHotspotInterface(
+                        credentials.copy(bssid = credentials.bssid ?: configuredBssid),
+                        configuredIpAddress,
+                        System.currentTimeMillis() + HOTSPOT_START_TIMEOUT_MS,
+                        callback,
+                    )
+                }
+
+                override fun onStopped() {
+                    localOnlyHotspotReservation = null
+                }
+
+                override fun onFailed(reason: Int) {
+                    if (preferredRequestActive) {
+                        preferredRequestActive = false
+                        Log.w(
+                            LOG_TAG,
+                            "5 GHz local-only hotspot failed with reason $reason; " +
+                                "retrying automatic band selection",
                         )
-                    }
-
-                    override fun onStopped() {
-                        localOnlyHotspotReservation = null
-                    }
-
-                    override fun onFailed(reason: Int) {
+                        startDefaultLocalOnlyHotspot(hotspotCallback, callback)
+                    } else {
                         Log.e(LOG_TAG, "Local-only hotspot failed with reason $reason")
                         completeStart(callback, null)
                     }
-                },
-                mainHandler,
-            )
+                }
+            }
+
+        if (prefer5GhzHotspot) {
+            preferredRequestActive = true
+            if (start5GhzLocalOnlyHotspot(hotspotCallback)) {
+                return
+            }
+            preferredRequestActive = false
+        }
+        startDefaultLocalOnlyHotspot(hotspotCallback, callback)
+    }
+
+    private fun startDefaultLocalOnlyHotspot(
+        hotspotCallback: WifiManager.LocalOnlyHotspotCallback,
+        callback: (success: Boolean, wifiHotspotInfo: WifiHotspotInfo?) -> Unit,
+    ) {
+        try {
+            wifiManager.startLocalOnlyHotspot(hotspotCallback, mainHandler)
         } catch (exception: SecurityException) {
             Log.e(LOG_TAG, "Missing permission to start local-only hotspot", exception)
             completeStart(callback, null)
         } catch (exception: RuntimeException) {
             Log.e(LOG_TAG, "Could not start local-only hotspot", exception)
             completeStart(callback, null)
+        }
+    }
+
+    @SuppressLint("NewApi", "InlinedApi")
+    private fun start5GhzLocalOnlyHotspot(
+        hotspotCallback: WifiManager.LocalOnlyHotspotCallback
+    ): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return false
+        }
+
+        return try {
+            HiddenApiBypass.addHiddenApiExemptions(
+                "Landroid/net/wifi/SoftApConfiguration\$Builder;",
+                "Landroid/net/wifi/WifiManager;",
+            )
+            val builder = SoftApConfiguration.Builder()
+            builder.javaClass
+                .getDeclaredMethod(
+                    "setPassphrase",
+                    String::class.java,
+                    Int::class.javaPrimitiveType,
+                )
+                .invoke(
+                    builder,
+                    UUID.randomUUID().toString().replace("-", "").take(16),
+                    SoftApConfiguration.SECURITY_TYPE_WPA2_PSK,
+                )
+            builder.setChannels(
+                SparseIntArray(1).apply {
+                    put(SoftApConfiguration.BAND_5GHZ, 36)
+                }
+            )
+            val configuration = builder.build()
+            val executor =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    context.mainExecutor
+                } else {
+                    Executor(mainHandler::post)
+                }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+                wifiManager.startLocalOnlyHotspotWithConfiguration(
+                    configuration,
+                    executor,
+                    hotspotCallback,
+                )
+            } else {
+                wifiManager.javaClass
+                    .getDeclaredMethod(
+                        "startLocalOnlyHotspot",
+                        SoftApConfiguration::class.java,
+                        Executor::class.java,
+                        WifiManager.LocalOnlyHotspotCallback::class.java,
+                    )
+                    .invoke(wifiManager, configuration, executor, hotspotCallback)
+            }
+            Log.i(LOG_TAG, "Requested a 5 GHz local-only hotspot")
+            true
+        } catch (exception: InvocationTargetException) {
+            Log.w(
+                LOG_TAG,
+                "Could not request a 5 GHz local-only hotspot",
+                exception.targetException,
+            )
+            false
+        } catch (exception: ReflectiveOperationException) {
+            Log.w(LOG_TAG, "Configured local-only hotspot API is unavailable", exception)
+            false
+        } catch (exception: SecurityException) {
+            Log.w(LOG_TAG, "Configured local-only hotspot permission was denied", exception)
+            false
+        } catch (exception: UnsupportedOperationException) {
+            Log.w(LOG_TAG, "5 GHz local-only hotspot is unsupported", exception)
+            false
+        } catch (exception: NoSuchMethodError) {
+            Log.w(LOG_TAG, "Configured local-only hotspot method is unavailable", exception)
+            false
+        } finally {
+            HiddenApiBypass.clearHiddenApiExemptions()
         }
     }
 

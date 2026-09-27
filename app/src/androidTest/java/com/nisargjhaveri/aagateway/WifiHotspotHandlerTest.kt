@@ -53,6 +53,7 @@ class WifiHotspotHandlerTest {
                 null,
                 "10.249.96.99",
                 true,
+                true,
             ) { started, info ->
                 success = started
                 hotspotInfo = info

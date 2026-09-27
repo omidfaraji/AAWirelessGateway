@@ -17,6 +17,7 @@ data class SettingsUiState(
     val isWirelessClient: Boolean,
     val clientAddress: String?,
     val nativeConnectionFlow: Boolean,
+    val prefer5GhzHotspot: Boolean,
     val hotspotIpAddress: String,
     val hotspotSsid: String,
     val hotspotPassword: String,
@@ -89,6 +90,8 @@ data class SettingsUiState(
                 clientAddress = preferences.getString("client_bt_mac", null),
                 nativeConnectionFlow =
                     preferences.getBoolean("native_connection_flow", true),
+                prefer5GhzHotspot =
+                    preferences.getBoolean("prefer_5ghz_hotspot", true),
                 hotspotIpAddress =
                     preferences.getString("hotspot_ip_address", "").orEmpty(),
                 hotspotSsid = preferences.getString("hotspot_ssid", "").orEmpty(),

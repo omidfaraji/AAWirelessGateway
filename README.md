@@ -33,11 +33,12 @@ Install the app only on the gateway phone:
 2. Open AA Wireless Gateway and enable **USB gateway - spare phone**.
 3. Select the main phone under **Android Auto phone**.
 4. Keep **Native wireless Android Auto** enabled.
-5. Grant every permission shown under **Permissions and pairing**.
-6. Confirm the status card says **Ready to connect**.
-7. Enable Bluetooth, Wi-Fi, and wireless Android Auto on the main phone.
-8. Connect the gateway phone to the car's Android Auto USB port.
-9. If Android asks which app should handle the USB device, choose **AA Wireless Gateway** and
+5. Keep **Prefer 5 GHz hotspot** enabled to reduce interference where supported.
+6. Grant every permission shown under **Permissions and pairing**.
+7. Confirm the status card says **Ready to connect**.
+8. Enable Bluetooth, Wi-Fi, and wireless Android Auto on the main phone.
+9. Connect the gateway phone to the car's Android Auto USB port.
+10. If Android asks which app should handle the USB device, choose **AA Wireless Gateway** and
    **Always**.
 
 The first connection may take one or two minutes while permission and pairing prompts are
@@ -79,7 +80,9 @@ In native mode, the gateway:
 
 Android 11 and newer hotspot behaviors are handled automatically, including dynamic hotspot
 addresses and systems that hide network-interface details. An optional gateway IP fallback is
-available for devices where Android prevents automatic discovery.
+available for devices where Android prevents automatic discovery. Native mode prefers a
+non-DFS 5 GHz hotspot on supported phones and automatically returns to Android's normal band
+selection when the operating system rejects the request.
 
 ## Troubleshooting
 
@@ -90,6 +93,7 @@ available for devices where Android prevents automatic discovery.
 | Hotspot creation fails on Android 12 or older | Grant precise location and **Allow all the time** location access. |
 | The main phone does not connect | Enable Bluetooth and Wi-Fi, confirm the phones are paired, and enable wireless Android Auto. |
 | Connection stops when the screen turns off | Set battery usage for the app to **Unrestricted** on the gateway phone. |
+| Projection is slow in congested areas | Enable **Prefer 5 GHz hotspot**. Android may still select 2.4 GHz if the phone or ROM does not support configured 5 GHz local hotspots. |
 | Connection repeatedly fails | Unplug USB, stop the app, verify both phones still show **Ready to connect**, and try again. |
 
 For debugging, capture logs immediately after a failed attempt:

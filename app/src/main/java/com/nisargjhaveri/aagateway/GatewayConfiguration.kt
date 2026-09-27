@@ -9,6 +9,7 @@ import android.os.Build
 data class GatewayConfiguration(
     val clientAddress: String?,
     val nativeConnectionFlow: Boolean,
+    val prefer5GhzHotspot: Boolean,
     val hotspotSsid: String,
     val hotspotPassphrase: String,
     val hotspotBssid: String?,
@@ -25,6 +26,8 @@ data class GatewayConfiguration(
                 clientAddress = preferences.getString("client_bt_mac", null),
                 nativeConnectionFlow =
                     preferences.getBoolean("native_connection_flow", true),
+                prefer5GhzHotspot =
+                    preferences.getBoolean("prefer_5ghz_hotspot", true),
                 hotspotSsid = preferences.getString("hotspot_ssid", "").orEmpty(),
                 hotspotPassphrase =
                     preferences.getString("hotspot_password", "").orEmpty(),

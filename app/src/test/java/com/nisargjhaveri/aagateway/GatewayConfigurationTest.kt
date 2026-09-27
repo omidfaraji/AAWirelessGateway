@@ -111,6 +111,7 @@ class GatewayConfigurationTest {
         return GatewayConfiguration(
             clientAddress = clientAddress,
             nativeConnectionFlow = nativeConnectionFlow,
+            prefer5GhzHotspot = true,
             hotspotSsid = hotspotSsid,
             hotspotPassphrase = hotspotPassphrase,
             hotspotBssid = null,

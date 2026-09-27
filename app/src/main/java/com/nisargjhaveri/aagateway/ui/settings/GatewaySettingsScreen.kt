@@ -229,6 +229,17 @@ fun GatewaySettingsScreen(
                                 saveBoolean("native_connection_flow", it)
                             },
                         )
+                        if (state.nativeConnectionFlow) {
+                            ToggleSettingRow(
+                                title = "Prefer 5 GHz hotspot",
+                                summary =
+                                    "Use a faster, less congested band with automatic fallback.",
+                                checked = state.prefer5GhzHotspot,
+                                onCheckedChange = {
+                                    saveBoolean("prefer_5ghz_hotspot", it)
+                                },
+                            )
+                        }
                         ValueSettingRow(
                             title = "Gateway IP fallback",
                             value =
