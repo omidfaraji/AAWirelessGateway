@@ -1,6 +1,10 @@
 package com.nisargjhaveri.aagateway.ui.settings
 
+import android.bluetooth.BluetoothAdapter
+import android.content.BroadcastReceiver
 import android.content.SharedPreferences
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -27,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -115,6 +120,24 @@ fun GatewaySettingsScreen(
             }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    DisposableEffect(context) {
+        val bluetoothStateReceiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(context: android.content.Context, intent: Intent) {
+                    if (intent.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+                        permissionRevision += 1
+                    }
+                }
+            }
+        ContextCompat.registerReceiver(
+            context,
+            bluetoothStateReceiver,
+            IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        onDispose { context.unregisterReceiver(bluetoothStateReceiver) }
     }
 
     val state =

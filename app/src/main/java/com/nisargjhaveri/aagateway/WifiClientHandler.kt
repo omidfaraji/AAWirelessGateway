@@ -235,9 +235,23 @@ class WifiClientHandler(context: Context, activityResultCaller: ActivityResultCa
     }
 
     fun requestLocationPermissions(callback: ((success: Boolean) -> Unit)?) {
-        mRequestPermissionsLauncher?.let {
-            mRequestPermissionsCallback = callback
-            it.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        val launcher = mRequestPermissionsLauncher
+        if (launcher == null) {
+            callback?.invoke(false)
+            return
+        }
+
+        mRequestPermissionsCallback = callback
+        try {
+            launcher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                )
+            )
+        } catch (_: IllegalStateException) {
+            mRequestPermissionsCallback = null
+            callback?.invoke(false)
         }
     }
 
@@ -247,9 +261,18 @@ class WifiClientHandler(context: Context, activityResultCaller: ActivityResultCa
             return
         }
 
-        mRequestPermissionsLauncher?.let {
-            mRequestPermissionsCallback = callback
-            it.launch(arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION))
+        val launcher = mRequestPermissionsLauncher
+        if (launcher == null) {
+            callback?.invoke(false)
+            return
+        }
+
+        mRequestPermissionsCallback = callback
+        try {
+            launcher.launch(arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION))
+        } catch (_: IllegalStateException) {
+            mRequestPermissionsCallback = null
+            callback?.invoke(false)
         }
     }
 
@@ -259,9 +282,18 @@ class WifiClientHandler(context: Context, activityResultCaller: ActivityResultCa
             return
         }
 
-        mRequestNearbyWifiPermissionLauncher?.let {
-            mRequestPermissionsCallback = callback
-            it.launch(Manifest.permission.NEARBY_WIFI_DEVICES)
+        val launcher = mRequestNearbyWifiPermissionLauncher
+        if (launcher == null) {
+            callback?.invoke(false)
+            return
+        }
+
+        mRequestPermissionsCallback = callback
+        try {
+            launcher.launch(Manifest.permission.NEARBY_WIFI_DEVICES)
+        } catch (_: IllegalStateException) {
+            mRequestPermissionsCallback = null
+            callback?.invoke(false)
         }
     }
 }

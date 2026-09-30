@@ -95,9 +95,18 @@ class BluetoothHandler (context: Context, activityResultCaller: ActivityResultCa
             return
         }
 
-        mRequestPermissionsLauncher?.let {
-            mRequestPermissionsCallback = callback
-            it.launch(Manifest.permission.BLUETOOTH_CONNECT)
+        val launcher = mRequestPermissionsLauncher
+        if (launcher == null) {
+            callback?.invoke(false)
+            return
+        }
+
+        mRequestPermissionsCallback = callback
+        try {
+            launcher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+        } catch (_: IllegalStateException) {
+            mRequestPermissionsCallback = null
+            callback?.invoke(false)
         }
     }
 
@@ -116,13 +125,12 @@ class BluetoothHandler (context: Context, activityResultCaller: ActivityResultCa
             return listOf()
         }
 
-        mBluetoothAdapter?.let { adapter ->
-            return adapter.bondedDevices.map {
+        return runCatching {
+            mBluetoothAdapter?.bondedDevices?.map {
                 BluetoothDeviceInfo(it.address, it.name)
             }
-        }
-
-        return listOf()
+                ?: emptyList()
+        }.getOrDefault(emptyList())
     }
 
     private inner class ConnectThread(device: BluetoothDevice, val log: (String) -> Unit) : Thread() {
