@@ -1,6 +1,7 @@
 package com.nisargjhaveri.aagateway
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.app.Activity
 import android.bluetooth.*
 import android.content.Context
@@ -56,13 +57,30 @@ class BluetoothHandler (context: Context, activityResultCaller: ActivityResultCa
     }
 
     fun isEnabled(): Boolean {
-        return mBluetoothAdapter?.isEnabled ?: false
+        return runCatching { mBluetoothAdapter?.isEnabled ?: false }.getOrDefault(false)
     }
 
     fun setEnabled(callback: ((success: Boolean) -> Unit)?) {
-        mEnableBluetoothLauncher?.let {
-            mEnableBluetoothCallback = callback
-            it.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+        if (!hasConnectPermissions()) {
+            callback?.invoke(false)
+            return
+        }
+
+        val launcher = mEnableBluetoothLauncher
+        if (launcher == null) {
+            callback?.invoke(false)
+            return
+        }
+
+        mEnableBluetoothCallback = callback
+        try {
+            launcher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+        } catch (_: ActivityNotFoundException) {
+            mEnableBluetoothCallback = null
+            callback?.invoke(false)
+        } catch (_: SecurityException) {
+            mEnableBluetoothCallback = null
+            callback?.invoke(false)
         }
     }
 

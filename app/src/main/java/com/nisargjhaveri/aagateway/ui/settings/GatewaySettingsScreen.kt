@@ -565,8 +565,19 @@ fun GatewaySettingsScreen(
                                 title = "Turn on Bluetooth",
                                 summary = "Bluetooth is required to find and connect the phones.",
                                 onClick = {
-                                    bluetoothHandler.setEnabled {
-                                        permissionRevision += 1
+                                    if (!state.bluetoothPermissionGranted) {
+                                        bluetoothHandler.requestConnectPermissions { granted ->
+                                            permissionRevision += 1
+                                            if (granted) {
+                                                bluetoothHandler.setEnabled {
+                                                    permissionRevision += 1
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        bluetoothHandler.setEnabled {
+                                            permissionRevision += 1
+                                        }
                                     }
                                 },
                             )
