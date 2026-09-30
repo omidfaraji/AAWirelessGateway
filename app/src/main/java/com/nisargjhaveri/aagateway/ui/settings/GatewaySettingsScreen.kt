@@ -449,7 +449,14 @@ fun GatewaySettingsScreen(
                                             }
                                         }
                                             .onSuccess { shareIntent ->
-                                                context.startActivity(shareIntent)
+                                                runCatching {
+                                                    context.startActivity(shareIntent)
+                                                }.onFailure {
+                                                    gatewayToolResult =
+                                                        "Diagnostic sharing failed: ${
+                                                            it.message ?: "unknown error"
+                                                        }"
+                                                }
                                             }
                                             .onFailure {
                                                 gatewayToolResult =
