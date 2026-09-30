@@ -3,11 +3,13 @@ package com.nisargjhaveri.aagateway.ui.settings
 import android.content.SharedPreferences
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -30,6 +32,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.preference.PreferenceManager
 import com.nisargjhaveri.aagateway.BluetoothHandler
+import com.nisargjhaveri.aagateway.GatewayDiagnostics
+import com.nisargjhaveri.aagateway.GatewayDiagnosticsExporter
+import com.nisargjhaveri.aagateway.GatewayRecovery
 import com.nisargjhaveri.aagateway.PrivilegedSystemAppInstaller
 import com.nisargjhaveri.aagateway.WifiClientHandler
 import com.nisargjhaveri.aagateway.ui.components.ActionSettingRow
@@ -43,6 +48,7 @@ import com.nisargjhaveri.aagateway.ui.components.TextSettingDialog
 import com.nisargjhaveri.aagateway.ui.components.ToggleSettingRow
 import com.nisargjhaveri.aagateway.ui.components.ValueSettingRow
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -86,6 +92,10 @@ fun GatewaySettingsScreen(
     var privilegedInstallResult by
         remember { mutableStateOf<PrivilegedSystemAppInstaller.Result?>(null) }
     var privilegedOperationInProgress by remember { mutableStateOf(false) }
+    var gatewayDiagnostics by remember { mutableStateOf<GatewayDiagnostics?>(null) }
+    var gatewayToolResult by remember { mutableStateOf<String?>(null) }
+    var powerProfileTarget by remember { mutableStateOf<Boolean?>(null) }
+    var powerProfileOperationInProgress by remember { mutableStateOf(false) }
 
     DisposableEffect(preferences) {
         val listener =
@@ -116,6 +126,20 @@ fun GatewaySettingsScreen(
                 wifiClientHandler,
             )
         }
+
+    LaunchedEffect(state.isGateway) {
+        if (!state.isGateway) {
+            gatewayDiagnostics = null
+            return@LaunchedEffect
+        }
+        while (true) {
+            gatewayDiagnostics =
+                withContext(Dispatchers.IO) {
+                    GatewayDiagnostics.read(context)
+                }
+            delay(3_000)
+        }
+    }
 
     LaunchedEffect(
         state.systemAppInstalled,
@@ -351,6 +375,92 @@ fun GatewaySettingsScreen(
                                 },
                             )
                         }
+                    }
+                }
+
+                item {
+                    SettingsSection(title = "Gateway tools") {
+                        val hotspot = gatewayDiagnostics?.hotspot
+                        val chargingThermal = gatewayDiagnostics?.chargingThermal
+                        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                            Text(
+                                text =
+                                    "Hotspot: ${
+                                        hotspot?.summary ?: "Reading live diagnostics…"
+                                    }",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = "BSSID: ${hotspot?.bssid ?: "Unsupported"}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text =
+                                    "Charging and thermal: ${
+                                        chargingThermal?.summary ?: "Reading status…"
+                                    }",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        ActionSettingRow(
+                            title = "Restart gateway session",
+                            summary =
+                                "Stop and restart the current USB gateway connection. " +
+                                    "Reconnect USB if no accessory is present.",
+                            enabled = !powerProfileOperationInProgress,
+                            onClick = {
+                                coroutineScope.launch {
+                                    gatewayToolResult =
+                                        withContext(Dispatchers.IO) {
+                                            GatewayRecovery.restart(context)
+                                        }
+                                }
+                            },
+                        )
+                        ToggleSettingRow(
+                            title = "High-performance gateway profile",
+                            summary =
+                                if (powerProfileOperationInProgress) {
+                                    "Waiting for explicit root approval..."
+                                } else {
+                                    "Root-controlled fixed-performance mode; reversible and " +
+                                        "reported unsupported when unavailable."
+                                },
+                            checked = state.gatewayPowerProfileEnabled,
+                            enabled = !powerProfileOperationInProgress,
+                            onCheckedChange = { powerProfileTarget = it },
+                        )
+                        ActionSettingRow(
+                            title = "Share diagnostic logs",
+                            summary = "Export hotspot, charging, thermal, and AAService status.",
+                            enabled = gatewayDiagnostics != null,
+                            onClick = {
+                                val diagnostics = gatewayDiagnostics
+                                if (diagnostics != null) {
+                                    coroutineScope.launch {
+                                        runCatching {
+                                            withContext(Dispatchers.IO) {
+                                                GatewayDiagnosticsExporter.createShareIntent(
+                                                    context,
+                                                    diagnostics,
+                                                )
+                                            }
+                                        }
+                                            .onSuccess { shareIntent ->
+                                                context.startActivity(shareIntent)
+                                            }
+                                            .onFailure {
+                                                gatewayToolResult =
+                                                    "Diagnostic export failed: ${
+                                                        it.message ?: "unknown error"
+                                                    }"
+                                            }
+                                    }
+                                }
+                            },
+                        )
                     }
                 }
             }
@@ -680,6 +790,42 @@ fun GatewaySettingsScreen(
         )
     }
 
+    powerProfileTarget?.let { target ->
+        ConfirmationDialog(
+            title =
+                if (target) {
+                    "Enable high-performance profile?"
+                } else {
+                    "Disable high-performance profile?"
+                },
+            message =
+                "This uses the existing root access path to ${
+                    if (target) "enable" else "disable"
+                } Android fixed-performance mode. It does not change charging limits and can be " +
+                    "reversed at any time.",
+            confirmLabel = if (target) "Enable" else "Disable",
+            onConfirm = {
+                powerProfileTarget = null
+                powerProfileOperationInProgress = true
+                coroutineScope.launch {
+                    val result =
+                        withContext(Dispatchers.IO) {
+                            privilegedSystemAppInstaller.setGatewayPowerProfile(target)
+                        }
+                    if (result.success) {
+                        preferences
+                            .edit()
+                            .putBoolean("gateway_power_profile", target)
+                            .apply()
+                    }
+                    powerProfileOperationInProgress = false
+                    gatewayToolResult = result.message
+                }
+            },
+            onDismiss = { powerProfileTarget = null },
+        )
+    }
+
     privilegedInstallResult?.let { result ->
         if (result.success) {
             ConfirmationDialog(
@@ -710,6 +856,13 @@ fun GatewaySettingsScreen(
                 onDismiss = { privilegedInstallResult = null },
             )
         }
+    }
+    gatewayToolResult?.let { message ->
+        InformationDialog(
+            title = "Gateway tools",
+            message = message,
+            onDismiss = { gatewayToolResult = null },
+        )
     }
 }
 

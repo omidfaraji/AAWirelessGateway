@@ -100,6 +100,42 @@ class PrivilegedSystemAppInstaller(context: Context) {
         }
     }
 
+    fun setGatewayPowerProfile(enabled: Boolean): Result {
+        val profile = if (enabled) "true" else "false"
+        val rootResult =
+            runRootCommand(
+                """
+                set -eu
+                test "$(id -u)" = "0" || {
+                    echo "Root access was not granted."
+                    exit 10
+                }
+                command -v cmd >/dev/null 2>&1 || {
+                    echo "The Android power profile command is unavailable."
+                    exit 14
+                }
+                cmd power set-fixed-performance-mode-enabled $profile
+                """.trimIndent()
+            )
+        return if (rootResult.exitCode == 0) {
+            Result(
+                true,
+                if (enabled) {
+                    "Fixed-performance mode enabled."
+                } else {
+                    "Fixed-performance mode disabled."
+                },
+            )
+        } else {
+            Result(
+                false,
+                rootResult.output.ifBlank {
+                    "This Android version does not support the reversible power profile."
+                },
+            )
+        }
+    }
+
     private fun installModule(moduleArchive: File): Result {
         val archivePath = shellQuote(moduleArchive.absolutePath)
         val command =

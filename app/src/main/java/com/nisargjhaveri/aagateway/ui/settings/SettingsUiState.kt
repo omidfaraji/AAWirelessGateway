@@ -40,6 +40,7 @@ data class SettingsUiState(
     val overlayPermissionGranted: Boolean,
     val manageUsbPermissionGranted: Boolean,
     val systemAppInstalled: Boolean,
+    val gatewayPowerProfileEnabled: Boolean,
     val privilegedInstallTransition: String?,
     val bluetoothEnabled: Boolean,
     val pairedDevices: List<BluetoothHandler.BluetoothDeviceInfo>,
@@ -132,6 +133,8 @@ data class SettingsUiState(
                     context.applicationInfo.flags and
                         (ApplicationInfo.FLAG_SYSTEM or
                             ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0,
+                gatewayPowerProfileEnabled =
+                    preferences.getBoolean("gateway_power_profile", false),
                 privilegedInstallTransition =
                     preferences.getString(
                         PrivilegedSystemAppInstaller.PREFERENCE_INSTALL_TRANSITION,
